@@ -73,7 +73,7 @@ def add_this(name, args):
 
 
 
-add_this("different_dises",   {"dises" : [1, 2, 3, 4, 5]})
+add_this("different_dises",   {"dises" : [1, 2, 3]})
                     
 
 

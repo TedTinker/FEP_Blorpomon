@@ -100,6 +100,7 @@ class Discriminator(nn.Module):
             nn.Tanh())
         
         self.apply(init_weights)
+        self.to(self.args.device)
 
     def forward(self, x):
         batch_size, num_channels, height, width = x.size()
@@ -130,7 +131,7 @@ class Discriminator(nn.Module):
         out = self.b(out)
         
         mu, std = var(out, self.mu, self.std, self.args)
-        sampled = sample(mu, std, "cpu")
+        sampled = sample(mu, std, self.args.device)
         action = torch.tanh(sampled)
         log_prob = Normal(mu, std).log_prob(sampled) - torch.log(1 - action.pow(2) + 1e-6)
         log_prob = torch.mean(log_prob, -1).unsqueeze(-1)  

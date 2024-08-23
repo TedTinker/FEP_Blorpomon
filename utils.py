@@ -27,27 +27,23 @@ from torch.distributions import Normal
 if(os.getcwd().split("/")[-1] != "FEP_Blorpomon"): os.chdir("FEP_Blorpomon")
 print(os.getcwd())
 
-
+def print(*args, **kwargs):
+    kwargs["flush"] = True
+    builtins.print(*args, **kwargs)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("\n\nDevice: {}.\n\n".format(device))
 
 
 
-def print(*args, **kwargs):
-    kwargs["flush"] = True
-    builtins.print(*args, **kwargs)
-
-
-
 parser = argparse.ArgumentParser()
 
     # Meta
-parser.add_argument("--arg_title",                      type=str,           default = "default",
-                help='Title of argument-set containing all non-default arguments.') 
-parser.add_argument("--arg_name",                       type=str,           default = "default",
-                    help='Title of argument-set for human-understanding.') 
-parser.add_argument("--init_seed",          type=float,     default = 777) 
+parser.add_argument("--arg_title",                      type=str,           default = "default") 
+parser.add_argument("--arg_name",                       type=str,           default = "default") 
+parser.add_argument("--comm",                           type=str,           default = "deigo")
+parser.add_argument("--init_seed",          type=float,     default = 777)
+parser.add_argument("--agents",             type=int,       default = 1) 
 parser.add_argument("--previous_agents",    type=int,       default = 0)
 parser.add_argument("--device",             type=str,       default = device)
 
@@ -74,7 +70,7 @@ parser.add_argument('--dis_alpha',          type=float,     default = 1)
 parser.add_argument('--pos_channels',       type=int,       default = 4)
 
     # Presentation options
-parser.add_argument("--epochs_per_vid",     type=int,       default = 25)
+parser.add_argument("--epochs_per_vid",     type=int,       default = 100)
 parser.add_argument("--seeds_used",         type=int,       default = 6)
 parser.add_argument("--seed_duration",      type=int,       default = 10)
 
@@ -178,7 +174,7 @@ for file_name in image_files:
     flipped_image = image.transpose(Image.FLIP_LEFT_RIGHT)
     flipped_image_tensor = transform(flipped_image)
     images.append(flipped_image_tensor)
-all_images_tensor = torch.stack(images)
+all_images_tensor = torch.stack(images).to(device)
 
 
 
@@ -211,7 +207,7 @@ def show_images_from_tensor(image_tensor, save_path='animation.gif', fps=10):
             axes = [axes]
         for i in range(N):
             img = image_tensor[i, t] if animate else image_tensor[i]
-            img = img.permute(1, 2, 0).numpy() 
+            img = img.permute(1, 2, 0).to("cpu").numpy() 
             axes[i].imshow(img)
             axes[i].axis('off')
         fig.canvas.draw()
