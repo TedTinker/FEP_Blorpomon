@@ -1,11 +1,11 @@
+#%% 
 import os
-os.chdir("C://Users//tedjt//Desktop//Thinkster//126 fep gan/fep gan")
 
 import torch 
 from torch.optim import Adam
 import torch.nn.functional as F
 
-from utils import default_args, get_random_batch, create_interpolated_tensor, show_images_from_tensor, plot_vals
+from utils import default_args, get_random_batch, create_interpolated_tensor, show_images_from_tensor, plot_vals, print
 from generator import Generator
 from discriminator import Discriminator
 
@@ -13,7 +13,11 @@ from discriminator import Discriminator
 
 class GAN:
     def __init__(self, args = default_args):
-        self.args = default_args
+        self.args = args
+        
+        folder_name = "generated_images/" + str(self.args.arg_name)
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
         
         self.gen = Generator()
         self.gen_opt = Adam(self.gen.parameters(), args.gen_lr)
@@ -33,7 +37,7 @@ class GAN:
         self.epochs = 0
         
     def epoch(self):
-        print(self.epochs, end = ", ")
+        print(f"Epoch {self.epochs}")
         self.gen.train()
         for d in self.dis_list:
             d.train()
@@ -84,7 +88,7 @@ class GAN:
         if(self.epochs % self.args.epochs_per_vid == 0):
             self.make_images_with_seeds()
         if( self.epochs % self.args.epochs_per_vid == 0):
-            plot_vals(self.plot_vals_dict)
+            plot_vals(self.plot_vals_dict, save_path = f'{self.args.arg_name}/losses.png')
         
         self.plot_vals_dict["dis_losses_real"].append([])
         self.plot_vals_dict["dis_losses_fake"].append([])
@@ -94,14 +98,19 @@ class GAN:
         self.epochs += 1
         
     
+    
     def make_images_with_seeds(self):
         fake_images, _ = self.gen(self.seeds, use_std = False)
-        show_images_from_tensor(fake_images.unsqueeze(0), save_path=f'animation_{self.epochs}.gif')
+        show_images_from_tensor(fake_images.unsqueeze(0), save_path=f'{self.args.arg_name}/animation_{self.epochs}.gif')
         
+    def training(self):
+        for epoch in range(default_args.epochs):
+            self.epoch()
+            percent_done = str(self.epochs / self.args.epochs)
                 
         
         
 if(__name__ == "__main__"):
     gan = GAN()
-    for epoch in range(default_args.epochs):
-        gan.epoch()
+    gan.training()
+# %%

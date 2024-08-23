@@ -1,15 +1,21 @@
+#%%
+
 # To do:
 # Make it work on deigo
 # seed-sequence-maker not perfect
 # Instead of medians, also use quantiles etc
 
 from PIL import Image
+import datetime 
 import os
 import random
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse 
 import math
+import builtins
 from math import exp, log
 import scipy.stats as stats
 
@@ -18,6 +24,9 @@ from torch import nn
 from torchvision import transforms
 from torch.distributions import Normal
 
+if(os.getcwd().split("/")[-1] != "FEP_Blorpomon"): os.chdir("FEP_Blorpomon")
+print(os.getcwd())
+
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,10 +34,21 @@ print("\n\nDevice: {}.\n\n".format(device))
 
 
 
+def print(*args, **kwargs):
+    kwargs["flush"] = True
+    builtins.print(*args, **kwargs)
+
+
+
 parser = argparse.ArgumentParser()
 
     # Meta
-parser.add_argument("--folder_path",        type=str,       default = 'C://Users//tedjt//Desktop//Thinkster//126 fep gan//fep gan//real_images')
+parser.add_argument("--arg_title",                      type=str,           default = "default",
+                help='Title of argument-set containing all non-default arguments.') 
+parser.add_argument("--arg_name",                       type=str,           default = "default",
+                    help='Title of argument-set for human-understanding.') 
+parser.add_argument("--init_seed",          type=float,     default = 777) 
+parser.add_argument("--previous_agents",    type=int,       default = 0)
 parser.add_argument("--device",             type=str,       default = device)
 
     # Easy options
@@ -69,6 +89,42 @@ except:
     default_args = parser.parse_args([])
     try:    args    = parser.parse_args()
     except: args, _ = parser.parse_known_args()
+    
+    
+    
+#for arg_set in [default_args, args]:
+    #arg_set.sensors_shape = num_sensors
+        
+args_not_in_title = ["arg_title", "init_seed"]
+def get_args_title(default_args, args):
+    if(args.arg_title[:3] == "___"): return(args.arg_title)
+    name = "" ; first = True
+    arg_list = list(vars(default_args).keys())
+    arg_list.insert(0, arg_list.pop(arg_list.index("arg_name")))
+    for arg in arg_list:
+        if(arg in args_not_in_title): pass 
+        else: 
+            default, this_time = getattr(default_args, arg), getattr(args, arg)
+            if(this_time == default): pass
+            elif(arg == "arg_name"):
+                name += "{} (".format(this_time)
+            else: 
+                if first: first = False
+                else: name += ", "
+                name += "{}: {}".format(arg, this_time)
+    if(name == ""): name = "default" 
+    else:           name += ")"
+    if(name.endswith(" ()")): name = name[:-3]
+    parts = name.split(',')
+    name = "" ; line = ""
+    for i, part in enumerate(parts):
+        if(len(line) > 50 and len(part) > 2): name += line + "\n" ; line = ""
+        line += part
+        if(i+1 != len(parts)): line += ","
+    name += line
+    return(name)
+
+args.arg_title = get_args_title(default_args, args)
 
 
     
@@ -90,7 +146,7 @@ def sample(mu, std, device):
 
 
 if(__name__ == "__main__"):
-    image = Image.open(f'{args.folder_path}//original.png')
+    image = Image.open(f'real_images/original.png')
     width, height = image.size
     tile_num = 0
     for y in range(0, height, 64):
@@ -98,7 +154,7 @@ if(__name__ == "__main__"):
             if tile_num not in [0] + [i for i in range(202, 230)] + [i for i in range(760,768)]:
                 box = (x, y, x + 64, y + 64)
                 tile = image.crop(box)
-                tile.save(os.path.join(f'{args.folder_path}//{str(tile_num).zfill(3)}.png'))
+                tile.save(os.path.join(f'real_images/{str(tile_num).zfill(3)}.png'))
             tile_num += 1
     print(f"Total {tile_num} tiles created.")
 
@@ -108,12 +164,12 @@ transform = transforms.Compose([
     transforms.Resize((args.image_size, args.image_size)),
     transforms.ToTensor()])
 
-image_files = [f for f in os.listdir(args.folder_path) if os.path.isfile(os.path.join(args.folder_path, f))]
+image_files = [f for f in os.listdir("real_images") if os.path.isfile(os.path.join("real_images", f))]
 image_files = [f for f in image_files if f != "original.png"]
 image_files.sort()
 images = []
 for file_name in image_files:
-    image_path = os.path.join(args.folder_path, file_name)
+    image_path = os.path.join("real_images", file_name)
     image = Image.open(image_path)
     if image.mode == 'RGBA':
         image = image.convert('RGB')
@@ -164,7 +220,7 @@ def show_images_from_tensor(image_tensor, save_path='animation.gif', fps=10):
         pil_image = Image.fromarray(image_array)
         frames.append(pil_image)
         plt.close(fig) 
-    save_path = f"generated_images//{save_path}"
+    save_path = f"generated_images/{save_path}"
     frames[0].save(save_path, save_all=True, append_images=frames[1:], loop=0, duration=1000//fps)
 
 if(__name__ == "__main__"):
@@ -172,7 +228,7 @@ if(__name__ == "__main__"):
     
     
     
-def plot_vals(plot_vals_dict):
+def plot_vals(plot_vals_dict, save_path='losses.png'):
     # Calculate average discriminator losses
     avg_dis_loss_real = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_losses_real"]]
     avg_dis_loss_fake = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_losses_fake"]]
@@ -208,7 +264,9 @@ def plot_vals(plot_vals_dict):
     plt.grid(True)
     
     plt.tight_layout()
-    plt.show()
+    save_path = f"generated_images/{save_path}"
+    plt.savefig(save_path)
+    plt.close()
 
 
 
@@ -252,3 +310,21 @@ def generate_2d_sinusoidal_positions(batch_size, image_size, d_model=2, device='
     pe = torch.tile(pe.unsqueeze(0), (batch_size, 1, 1, 1))
     pe = pe.permute(0, 3, 1, 2) / 2
     return pe
+
+
+
+start_time = datetime.datetime.now()
+
+def duration(start_time = start_time):
+    change_time = datetime.datetime.now() - start_time
+    change_time = change_time# - datetime.timedelta(microseconds=change_time.microseconds)
+    return(change_time)
+
+def estimate_total_duration(proportion_completed, start_time=start_time):
+    if(proportion_completed != 0): 
+        so_far = datetime.datetime.now() - start_time
+        estimated_total = so_far / proportion_completed
+        estimated_total = estimated_total - datetime.timedelta(microseconds=estimated_total.microseconds)
+    else: estimated_total = "?:??:??"
+    return(estimated_total)
+# %%
