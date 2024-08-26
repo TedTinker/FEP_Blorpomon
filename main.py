@@ -1,15 +1,10 @@
 #%%
 
-import os
-import pickle, torch, random
+import torch, random
 import numpy as np
-from multiprocessing import Process, Queue, set_start_method
-from time import sleep 
-from math import floor
-from copy import deepcopy
 
 from gan import GAN
-from utils import args, duration, estimate_total_duration, print
+from utils import args, duration, print
 
 
 

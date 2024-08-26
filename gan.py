@@ -37,8 +37,13 @@ class GAN:
         self.epochs = 0
         
     def epoch(self):
+        
         if(self.epochs % self.args.epochs_per_vid == 0):
-            print(f"Epoch {self.epochs}")
+            print(f"Epoch {self.epochs}.")
+        else:
+            print(f"{self.epochs}", end = "... ")
+            
+            
         self.gen.train()
         for d in self.dis_list:
             d.train()
@@ -48,7 +53,13 @@ class GAN:
         fake_labels = torch.zeros(self.args.batch_size, 1).to(self.args.device)
         
         real_images = get_random_batch(batch_size = self.args.batch_size)
-        real_labels = torch.ones(self.args.batch_size, 1).to(self.args.device)
+        real_labels = torch.empty(self.args.batch_size, 1).uniform_(0.7, .9).to(self.args.device)
+        
+        num_to_flip = self.args.flips
+        original_fake_labels = fake_labels[:num_to_flip].clone()
+        original_real_labels = real_labels[:num_to_flip].clone()
+        fake_labels[:num_to_flip] = original_real_labels
+        real_labels[:num_to_flip] = original_fake_labels
         
         # Train discriminators
         for dis, opt in zip(self.dis_list, self.dis_opts):

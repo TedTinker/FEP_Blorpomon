@@ -1,9 +1,10 @@
 #%%
 
 # To do:
-# Make it work on deigo
+# Try plotting the positional channels, to see if they make sense.
+# Try generative larger images and cropping.
 # seed-sequence-maker not perfect
-# Instead of medians, also use quantiles etc
+# Should black and white be two separate channels, or one?
 
 from PIL import Image
 import datetime 
@@ -23,9 +24,10 @@ import torch
 from torch import nn
 from torchvision import transforms
 from torch.distributions import Normal
+from kornia.color import rgb_to_hsv 
 
-if(os.getcwd().split("/")[-1] != "FEP_Blorpomon"): os.chdir("FEP_Blorpomon")
-print(os.getcwd())
+if(not "FEP_Blorpomon" in [os.getcwd().split("/")[-1], os.getcwd().split("\\")[-1]]): 
+                           os.chdir("FEP_Blorpomon")
 
 def print(*args, **kwargs):
     kwargs["flush"] = True
@@ -61,16 +63,17 @@ parser.add_argument('--std_max',            type=int,       default = exp(2))
 parser.add_argument("--gen_lr",             type=float,     default = .001) 
 parser.add_argument("--dis_lr",             type=float,     default = .001) 
 parser.add_argument("--dises",              type=int,       default = 2) 
+parser.add_argument("--flips",              type=int,       default = 4) 
 
     # Awesome options
 parser.add_argument('--extrinsic',          type=float,     default = 1)
 parser.add_argument('--alpha',              type=float,     default = 1)
 parser.add_argument('--beta',               type=float,     default = 1)
 parser.add_argument('--dis_alpha',          type=float,     default = 1)
-parser.add_argument('--pos_channels',       type=int,       default = 4)
+parser.add_argument('--pos_channels',       type=int,       default = 8)
 
     # Presentation options
-parser.add_argument("--epochs_per_vid",     type=int,       default = 100)
+parser.add_argument("--epochs_per_vid",     type=int,       default = 10)
 parser.add_argument("--seeds_used",         type=int,       default = 6)
 parser.add_argument("--seed_duration",      type=int,       default = 10)
 
@@ -138,6 +141,46 @@ def var(x, mu_func, std_func, args):
 def sample(mu, std, device):
     e = Normal(0, 1).sample(std.shape).to(device)
     return(mu + e * std)
+
+class ConstrainedConv2d(nn.Conv2d):
+    def forward(self, input):
+        return nn.functional.conv2d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
+                                    self.padding, self.dilation, self.groups)
+        
+class Ted_Conv2d(nn.Module):
+    
+    def __init__(self, in_channels, out_channels, kernel_sizes = [(1,1),(3,3),(5,5)], stride = 1):
+        super(Ted_Conv2d, self).__init__()
+        
+        self.Conv2ds = nn.ModuleList()
+        for kernel, out_channel in zip(kernel_sizes, out_channels):
+            if(type(kernel) == int): 
+                kernel = (kernel, kernel)
+            padding = ((kernel[0]-1)//2, (kernel[1]-1)//2)
+            layer = nn.Sequential(
+                ConstrainedConv2d(
+                    in_channels = in_channels,
+                    out_channels = out_channel,
+                    kernel_size = kernel,
+                    padding = padding,
+                    padding_mode = "reflect",
+                    stride = stride))
+            self.Conv2ds.append(layer)
+                
+    def forward(self, x):
+        y = []
+        for Conv2d in self.Conv2ds: y.append(Conv2d(x)) 
+        return(torch.cat(y, dim = -3))
+    
+    
+    
+def rgb_to_circular_hsv(rgb):
+    hsv_image = rgb_to_hsv(rgb) 
+    hue = hsv_image[:, 0, :, :]
+    hue_sin = (torch.sin(hue) + 1) / 2
+    hue_cos = (torch.cos(hue) + 1) / 2
+    hsv_circular = torch.stack([hue_sin, hue_cos, hsv_image[:, 1, :, :], hsv_image[:, 2, :, :]], dim=1)
+    return hsv_circular
 
 
 
@@ -230,8 +273,8 @@ def plot_vals(plot_vals_dict, save_path='losses.png'):
     avg_dis_loss_fake = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_losses_fake"]]
     
     # Calculate average correct rates
-    avg_correct_rate_real = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_correct_rate_real"]]
-    avg_correct_rate_fake = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_correct_rate_fake"]]
+    avg_correct_rate_real = [100 * sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_correct_rate_real"]]
+    avg_correct_rate_fake = [100 * sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_correct_rate_fake"]]
     
     # Define epochs
     epochs = range(1, len(plot_vals_dict["gen_loss"]) + 1)
@@ -255,6 +298,7 @@ def plot_vals(plot_vals_dict, save_path='losses.png'):
     plt.plot(epochs, avg_correct_rate_fake, 'r-', label="Correct Rate (Fake)")
     plt.xlabel("Epochs")
     plt.ylabel("Correct Rate")
+    plt.ylim(0, 100)
     plt.title("Discriminator Correct Rates Over Epochs")
     plt.legend()
     plt.grid(True)
