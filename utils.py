@@ -44,38 +44,40 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--arg_title",                      type=str,           default = "default") 
 parser.add_argument("--arg_name",                       type=str,           default = "default") 
 parser.add_argument("--comm",                           type=str,           default = "deigo")
-parser.add_argument("--init_seed",          type=float,     default = 777)
-parser.add_argument("--agents",             type=int,       default = 1) 
-parser.add_argument("--previous_agents",    type=int,       default = 0)
-parser.add_argument("--device",             type=str,       default = device)
+parser.add_argument("--init_seed",                      type=float,     default = 777)
+parser.add_argument("--agents",                         type=int,       default = 1) 
+parser.add_argument("--previous_agents",                type=int,       default = 0)
+parser.add_argument("--device",                         type=str,       default = device)
 
     # Easy options
-parser.add_argument("--epochs",             type=int,       default = 10000) 
-parser.add_argument("--batch_size",         type=int,       default = 64) 
+parser.add_argument("--epochs",                         type=int,       default = 10000) 
+parser.add_argument("--batch_size",                     type=int,       default = 64) 
 
     # Harder options
-parser.add_argument("--image_size",         type=int,       default = 32)
-parser.add_argument("--seed_size",          type=int,       default = 128)
-parser.add_argument("--inner_state_size",   type=int,       default = 128)
-parser.add_argument("--median_size",        type=int,       default = 128)
-parser.add_argument('--std_min',            type=int,       default = exp(-20))
-parser.add_argument('--std_max',            type=int,       default = exp(2))
-parser.add_argument("--gen_lr",             type=float,     default = .001) 
-parser.add_argument("--dis_lr",             type=float,     default = .001) 
-parser.add_argument("--dises",              type=int,       default = 2) 
-parser.add_argument("--flips",              type=int,       default = 4) 
+parser.add_argument("--image_size",                     type=int,       default = 64)
+parser.add_argument("--seed_size",                      type=int,       default = 128)
+parser.add_argument("--inner_state_size",               type=int,       default = 128)
+parser.add_argument("--median_size",                    type=int,       default = 128)
+parser.add_argument('--std_min',                        type=int,       default = exp(-20))
+parser.add_argument('--std_max',                        type=int,       default = exp(2))
+parser.add_argument("--gen_lr",                         type=float,     default = .001) 
+parser.add_argument("--dis_lr",                         type=float,     default = .001) 
+parser.add_argument("--dises",                          type=int,       default = 2) 
+parser.add_argument("--flips",                          type=int,       default = 4) 
+parser.add_argument("--min_real",                       type=float,     default = .7) 
+parser.add_argument("--max_real",                       type=float,     default = .9) 
 
     # Awesome options
-parser.add_argument('--extrinsic',          type=float,     default = 1)
-parser.add_argument('--alpha',              type=float,     default = 1)
-parser.add_argument('--beta',               type=float,     default = 1)
-parser.add_argument('--dis_alpha',          type=float,     default = 1)
-parser.add_argument('--pos_channels',       type=int,       default = 8)
+parser.add_argument('--extrinsic',                      type=float,     default = 1)
+parser.add_argument('--alpha',                          type=float,     default = 1)
+parser.add_argument('--beta',                           type=float,     default = 1)
+parser.add_argument('--dis_alpha',                      type=float,     default = 1)
+parser.add_argument('--pos_channels',                   type=int,       default = 0)
 
     # Presentation options
-parser.add_argument("--epochs_per_vid",     type=int,       default = 10)
-parser.add_argument("--seeds_used",         type=int,       default = 6)
-parser.add_argument("--seed_duration",      type=int,       default = 10)
+parser.add_argument("--epochs_per_vid",                 type=int,       default = 10)
+parser.add_argument("--seeds_used",                     type=int,       default = 6)
+parser.add_argument("--seed_duration",                  type=int,       default = 10)
 
 
 
@@ -234,35 +236,51 @@ if(__name__ == "__main__"):
 
 
 
-def show_images_from_tensor(image_tensor, save_path='animation.gif', fps=10):
+
+def show_images_from_tensor(image_tensor, save_path='output_folder', fps=10):
+    # Ensure the save path is a directory
+    save_path = f"generated_images/{save_path}"
+    os.makedirs(save_path, exist_ok=True)
+
     image_tensor = image_tensor.detach()
     if image_tensor.dim() == 5:
         N, T, C, H, W = image_tensor.shape
         animate = True
-    if image_tensor.dim() == 4:
+    elif image_tensor.dim() == 4:
         N, C, H, W = image_tensor.shape
         T = 1
         animate = False
+    else:
+        raise ValueError("Unexpected tensor shape")
+
     frames = []
+    frame_index = 1
     for t in range(T):
-        fig, axes = plt.subplots(1, N, figsize=(N * (W / 10), H / 10), dpi=100)
-        if N == 1:
-            axes = [axes]
         for i in range(N):
             img = image_tensor[i, t] if animate else image_tensor[i]
-            img = img.permute(1, 2, 0).to("cpu").numpy() 
-            axes[i].imshow(img)
-            axes[i].axis('off')
-        fig.canvas.draw()
-        image_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
-        image_array = image_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        pil_image = Image.fromarray(image_array)
-        frames.append(pil_image)
-        plt.close(fig) 
-    save_path = f"generated_images/{save_path}"
-    frames[0].save(save_path, save_all=True, append_images=frames[1:], loop=0, duration=1000//fps)
+            img = img.permute(1, 2, 0).to("cpu").numpy()
 
-if(__name__ == "__main__"):
+            # Normalize the image to be between 0 and 1
+            img = (img - img.min()) / (img.max() - img.min())
+
+            # Convert numpy array to PIL image directly
+            pil_image = Image.fromarray((img * 255).astype(np.uint8))  # Assuming image is in [0, 1] range
+
+            # Save the image as a PNG file in the specified folder
+            image_filename = os.path.join(save_path, f'{frame_index}.png')
+            pil_image.save(image_filename)
+
+            # Append image to frames list for GIF creation
+            frames.append(pil_image)
+            frame_index += 1
+
+    # Create and save the GIF
+    gif_path = os.path.join(save_path, 'animation.gif')
+    resized_frames = [frame.resize((frame.width * 20, frame.height * 20), Image.NEAREST) for frame in frames]
+    resized_frames[0].save(gif_path, save_all=True, append_images=resized_frames[1:], loop=0, duration=1000//fps)
+
+
+if __name__ == "__main__":
     show_images_from_tensor(batch_tensor)
     
     

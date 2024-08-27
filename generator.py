@@ -27,7 +27,7 @@ class Generator(nn.Module):
         
         self.a = nn.Sequential(
             
-            # 4 by 4
+            # 5 by 5
             
             Ted_Conv2d(
                 32,
@@ -47,7 +47,7 @@ class Generator(nn.Module):
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             
-            # 8 by 8
+            # 10 by 10
             
             Ted_Conv2d(
                 32,
@@ -67,7 +67,7 @@ class Generator(nn.Module):
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             
-            # 16 by 16
+            # 20 by 20
             
             Ted_Conv2d(
                 32,
@@ -85,15 +85,35 @@ class Generator(nn.Module):
                 mode = "bilinear",
                 align_corners = True),
             nn.BatchNorm2d(32),
-            nn.LeakyReLU())
-        
-            # 32 by 32
-        
+            nn.LeakyReLU(),
+            
+            # 40 by 40
+            
+            Ted_Conv2d(
+                32,
+                [32 // 4] * 4,
+                kernel_sizes = [3, 5, 5, 7]),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
+            
+            Ted_Conv2d(
+                32,
+                [32 // 4] * 4,
+                kernel_sizes = [3, 5, 5, 7]),
+            nn.Upsample(
+                scale_factor = 2,
+                mode = "bilinear",
+                align_corners = True),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU()
+            # 80 by 80
+            )
+                
         self.b = nn.Sequential(
             Ted_Conv2d(
                 32 + self.args.pos_channels,
                 [32 // 4] * 4,
-                kernel_sizes = [3, 5, 5, 7]),
+                kernel_sizes = [5, 5, 7, 7]),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             
@@ -136,7 +156,7 @@ class Generator(nn.Module):
         
         out = (out + 1) / 2
         
-        crop = 4
+        crop = 8
         width, height = out.shape[-2], out.shape[-1]
         out = out[:, :, crop:width-crop, crop:height-crop]
         return out, log_prob

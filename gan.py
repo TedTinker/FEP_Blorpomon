@@ -48,18 +48,17 @@ class GAN:
         for d in self.dis_list:
             d.train()
 
-        # Make data
+        # Make data for discriminators
         fake_images, _ = self.gen()
         fake_labels = torch.zeros(self.args.batch_size, 1).to(self.args.device)
         
         real_images = get_random_batch(batch_size = self.args.batch_size)
-        real_labels = torch.empty(self.args.batch_size, 1).uniform_(0.7, .9).to(self.args.device)
+        real_labels = torch.empty(self.args.batch_size, 1).uniform_(self.args.min_real, self.args.max_real).to(self.args.device)
         
-        num_to_flip = self.args.flips
-        original_fake_labels = fake_labels[:num_to_flip].clone()
-        original_real_labels = real_labels[:num_to_flip].clone()
-        fake_labels[:num_to_flip] = original_real_labels
-        real_labels[:num_to_flip] = original_fake_labels
+        original_fake_labels = fake_labels[:self.args.flips].clone()
+        original_real_labels = real_labels[:self.args.flips].clone()
+        fake_labels[:self.args.flips] = original_real_labels
+        real_labels[:self.args.flips] = original_fake_labels
         
         # Train discriminators
         for dis, opt in zip(self.dis_list, self.dis_opts):
@@ -81,7 +80,7 @@ class GAN:
             loss.backward()
             opt.step()
             
-        # Make data
+        # Make data for generator
         fake_images, log_prob_gen = self.gen()
         real_labels = torch.ones(self.args.batch_size, 1).to(self.args.device)
         
@@ -99,8 +98,7 @@ class GAN:
         
         if(self.epochs % self.args.epochs_per_vid == 0):
             self.make_images_with_seeds()
-        if( self.epochs % self.args.epochs_per_vid == 0):
-            plot_vals(self.plot_vals_dict, save_path = f'{self.args.arg_name}/losses.png')
+            plot_vals(self.plot_vals_dict, save_path = f'{self.args.arg_name}/epoch_{str(self.epochs).zfill(4)}/losses.png')
         
         self.plot_vals_dict["dis_losses_real"].append([])
         self.plot_vals_dict["dis_losses_fake"].append([])
@@ -113,7 +111,7 @@ class GAN:
     
     def make_images_with_seeds(self):
         fake_images, _ = self.gen(self.seeds, use_std = False)
-        show_images_from_tensor(fake_images.unsqueeze(0), save_path=f'{self.args.arg_name}/animation_{self.epochs}.gif')
+        show_images_from_tensor(fake_images.unsqueeze(0), save_path=f'{self.args.arg_name}/epoch_{str(self.epochs).zfill(4)}')
         
     def training(self):
         for epoch in range(default_args.epochs):

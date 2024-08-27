@@ -94,7 +94,8 @@ def get_stats(x, args, display = False):
     w = torch.where((v >= brightness_threshold_white) & (s <= saturation_threshold_white), torch.ones_like(v), torch.zeros_like(v))
     b = torch.where((v <= brightness_threshold_black) & (s <= saturation_threshold_black), -torch.ones_like(v), torch.zeros_like(v))
     wb = w + b
-    #to_cat.append(wb) # These help the discriminator SO MUCH.
+    #to_cat.append(w)
+    to_cat.append(wb) # These help the discriminator SO MUCH.
                 
     batch_wb_mean = torch.mean(wb, dim=0, keepdim=True) # (1, channels, height, width)
     batch_wb_mean_tiled = batch_wb_mean.repeat(args.batch_size, 1, 1, 1)
@@ -145,7 +146,7 @@ class Discriminator(nn.Module):
             Ted_Conv2d(
                 3,
                 [32 // 4] * 4,
-                kernel_sizes = [3, 5, 5, 7]),
+                kernel_sizes = [5, 5, 7, 7]),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
         
@@ -155,10 +156,29 @@ class Discriminator(nn.Module):
         
         self.a = nn.Sequential(
             
-            # 32 by 32
+            # 64 by 64
             
             Ted_Conv2d(
                 example.shape[1],
+                [32 // 4] * 4,
+                kernel_sizes = [5, 5, 7, 7]),
+            nn.MaxPool2d(
+                kernel_size = 2,
+                stride = 2),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
+            
+            # 32 by 32
+            
+            Ted_Conv2d(
+                32,
+                [32 // 4] * 4,
+                kernel_sizes = [3, 5, 5, 7]),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
+                        
+            Ted_Conv2d(
+                32,
                 [32 // 4] * 4,
                 kernel_sizes = [3, 5, 5, 7]),
             nn.MaxPool2d(
@@ -271,7 +291,7 @@ if(__name__ == "__main__"):
     print()
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
         with record_function("model_inference"):
-            print(summary(dis, (args.batch_size, 3, 32, 32)))
+            print(summary(dis, (args.batch_size, 3, 64, 64)))
     print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
     
     
