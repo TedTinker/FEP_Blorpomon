@@ -1,5 +1,7 @@
 #%%
 
+# I use this if I'm using the cluster. 
+
 import torch, random
 import numpy as np
 

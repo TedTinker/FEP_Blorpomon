@@ -1,125 +1,109 @@
 #%%
+
+import os 
+
+os.chdir(r"C:\Users\Ted\Desktop\FEP_Blorpomon")
+
 import torch
 import torch.nn as nn
 from torchinfo import summary
 from torch.profiler import profile, record_function, ProfilerActivity
-from torch.distributions import Normal
 
-from utils import default_args, init_weights, var, sample, generate_2d_sinusoidal_positions, Ted_Conv2d
-
+from utils import default_args, init_weights, var, sample, My_Layer, position_layers
 
 
+
+# Let's make a generator!
 class Generator(nn.Module):
     def __init__(self, args = default_args):
         super(Generator, self).__init__()
         
         self.args = args
-                        
-        self.mu = nn.Sequential(
+                     
+        # From seeds to tensor for CNN.
+        self.process_seeds = nn.Sequential(
             nn.Linear(
                 in_features = self.args.seed_size, 
-                out_features =  32 * 5 * 5))
-        self.std = nn.Sequential(
-            nn.Linear(
-                in_features = self.args.seed_size, 
-                out_features =  32 * 5 * 5),
-            nn.Softplus())
+                out_features =  32 * 4 * 4))
         
+        # CNNs growing image size.
         self.a = nn.Sequential(
+            # 4 by 4
+            My_Layer(
+                in_channels = 34, 
+                channels = 32, 
+                kernel_size = 3, 
+                grow_or_shrink = "grow", 
+                paying_attention = False, 
+                attention_kernel_size = 1,
+                args = default_args),
+            # 8 by 8
+            My_Layer(
+                in_channels = 32, 
+                channels = 32, 
+                kernel_size = 3, 
+                grow_or_shrink = "grow", 
+                paying_attention = True, 
+                attention_kernel_size = 3,
+                args = default_args),
+            # 16 by 16
+            My_Layer(
+                in_channels = 32, 
+                channels = 32, 
+                kernel_size = 3, 
+                grow_or_shrink = "grow", 
+                paying_attention = True, 
+                attention_kernel_size = 3,
+                args = default_args))
+            # 32 by 32
+        
+        # Mean and standard deviation.
+        self.mu = nn.Sequential(
+            My_Layer(
+                in_channels = 34, 
+                channels = 32, 
+                kernel_size = 3, 
+                grow_or_shrink = "none", 
+                paying_attention = True, 
+                attention_kernel_size = 3,
+                activations = False, 
+                args = default_args))
+        
+        self.std = nn.Sequential(
+            My_Layer(
+                in_channels = 34, 
+                channels = 32, 
+                kernel_size = 3, 
+                grow_or_shrink = "none", 
+                paying_attention = True, 
+                attention_kernel_size = 3,
+                activations = False, 
+                args = default_args),
+            nn.Softplus())
             
-            # 5 by 5
-            
-            Ted_Conv2d(
-                32,
-                [32 // 4] * 4,
-                kernel_sizes = [1, 1, 3, 3]),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            
-            Ted_Conv2d(
-                32,
-                [32 // 4] * 4,
-                kernel_sizes = [1, 1, 3, 3]),  
-            nn.Upsample(
-                scale_factor = 2,
-                mode = "bilinear",
-                align_corners = True),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            
-            # 10 by 10
-            
-            Ted_Conv2d(
-                32,
-                [32 // 4] * 4,
-                kernel_sizes = [1, 3, 3, 5]),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            
-            Ted_Conv2d(
-                32,
-                [32 // 4] * 4,
-                kernel_sizes = [1, 3, 3, 5]),
-            nn.Upsample(
-                scale_factor = 2,
-                mode = "bilinear",
-                align_corners = True),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            
-            # 20 by 20
-            
-            Ted_Conv2d(
-                32,
-                [32 // 4] * 4,
-                kernel_sizes = [3, 3, 5, 5]),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            
-            Ted_Conv2d(
-                32,
-                [32 // 4] * 4,
-                kernel_sizes = [3, 3, 5, 5]),
-            nn.Upsample(
-                scale_factor = 2,
-                mode = "bilinear",
-                align_corners = True),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            
-            # 40 by 40
-            
-            Ted_Conv2d(
-                32,
-                [32 // 4] * 4,
-                kernel_sizes = [3, 5, 5, 7]),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            
-            Ted_Conv2d(
-                32,
-                [32 // 4] * 4,
-                kernel_sizes = [3, 5, 5, 7]),
-            nn.Upsample(
-                scale_factor = 2,
-                mode = "bilinear",
-                align_corners = True),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU()
-            # 80 by 80
-            )
-                
+        # CNNs growing image and finishing image. 
         self.b = nn.Sequential(
-            Ted_Conv2d(
-                32 + self.args.pos_channels,
-                [32 // 4] * 4,
-                kernel_sizes = [5, 5, 7, 7]),
+            My_Layer(
+                in_channels = 32, 
+                channels = 32, 
+                kernel_size = 3, 
+                grow_or_shrink = "grow", 
+                paying_attention = True, 
+                attention_kernel_size = 3,
+                args = default_args),
+            # 64 by 64                
+            nn.Conv2d(
+                in_channels = 32, 
+                out_channels = 32,
+                kernel_size = 3,
+                padding = 1,
+                padding_mode = "reflect"),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
-            
+            # Finish
             nn.Conv2d(
-                32, 
-                3, 
+                in_channels = 32, 
+                out_channels = 3, 
                 kernel_size=1, 
                 padding=0),  
             nn.Tanh())
@@ -129,40 +113,40 @@ class Generator(nn.Module):
         self.to(self.args.device)
 
     def forward(self, seeds = None, use_std = True):
+        # Start with seeds.
         if(seeds == None):
             seeds = torch.stack([torch.randn(self.args.seed_size) for _ in range(self.args.batch_size)], dim = 0).to(self.args.device)
         
-        mu, std = var(seeds, self.mu, self.std, self.args)
-        if(use_std):
+        processed_seeds = self.process_seeds(seeds)
+        processed_seeds = processed_seeds.view(-1, 32, 4, 4)
+        
+        # Add position layers.
+        h_grad, v_grad = position_layers(processed_seeds)
+        processed_seeds = torch.cat([processed_seeds, h_grad, v_grad], dim = 1)
+        
+        # Grow.
+        a = self.a(processed_seeds)
+        
+        # Add position layers.
+        h_grad, v_grad = position_layers(a)
+        a = torch.cat([a, h_grad, v_grad], dim = 1)
+            
+        # Apply mean and standard deviation.
+        mu, std = var(a, self.mu, self.std, self.args)
+        if(use_std and self.args.alpha != 0):
             sampled = sample(mu, std, self.args.device)
         else:
             sampled = sample(mu, 0 * std, self.args.device)
-        action = torch.tanh(sampled)
-        log_prob = Normal(mu, std).log_prob(sampled) - torch.log(1 - action.pow(2) + 1e-6)
-        log_prob = torch.mean(log_prob, -1).unsqueeze(-1)    
-            
-        out = action.view(-1, 32, 5, 5)
-        out = self.a(out)
         
-        if(self.args.pos_channels != 0):
-            positional_layers = generate_2d_sinusoidal_positions(
-                batch_size = out.shape[0], 
-                image_size = out.shape[2], 
-                d_model = self.args.pos_channels,
-                device=self.args.device)
-            out = torch.cat([out, positional_layers], dim = 1)
-        
-        out = self.b(out)
-        
+        # Finish.
+        out = self.b(sampled)
         out = (out + 1) / 2
         
-        crop = 8
-        width, height = out.shape[-2], out.shape[-1]
-        out = out[:, :, crop:width-crop, crop:height-crop]
-        return out, log_prob
+        return out, mu, std
 
 
 
+# Let's check it out!
 if(__name__ == "__main__"):
     args = default_args
     gen = Generator(args)
