@@ -17,6 +17,7 @@ import math
 import builtins
 from math import exp
 import imageio
+from statistics import log
 
 import torch 
 from torch import nn
@@ -51,8 +52,6 @@ def estimate_total_duration(proportion_completed, start_time=start_time):
 
 
 
-
-
 # Arguments.
 parser = argparse.ArgumentParser()
 
@@ -67,7 +66,7 @@ parser.add_argument("--previous_agents",                type=int,       default 
                     help='If using the cluster, the number of agents before this one.') 
 parser.add_argument("--comm",                           type=str,       default = "deigo",
                     help='If using the cluster, name of the cluster in use.') 
-parser.add_argument("--init_seed",                      type=float,     default = 777,
+parser.add_argument("--init_seed",                      type=float,     default = 777,  # I'm not sure this is working. 
                     help='For consistent randomness.') 
 parser.add_argument("--device",                         type=str,       default = device,
                     help='Either cpu or cuda.') 
@@ -77,7 +76,7 @@ parser.add_argument("--epochs",                         type=int,       default 
                     help='How many epochs for training?') 
 parser.add_argument("--batch_size",                     type=int,       default = 64,
                     help='How large are the batches used in epochs?') 
-parser.add_argument("--dropout",                        type=int,       default = .2,
+parser.add_argument("--dropout",                        type=int,       default = .01,
                     help='How much dropout for the discriminator?') 
 parser.add_argument("--image_size",                     type=int,       default = 64,
                     help='How large are the pictures? (Not used much.)') 
@@ -105,13 +104,13 @@ parser.add_argument("--max_real",                       type=float,     default 
     # Awesome options
 parser.add_argument('--extrinsic',                      type=float,     default = 5,
                     help='Value of extrinsic rewards (generating good pictures).') 
-parser.add_argument('--alpha',                          type=float,     default = .0,
+parser.add_argument('--alpha',                          type=float,     default = .05,
                     help='How much generator\'s entropy is rewarded.') 
-parser.add_argument('--beta',                           type=float,     default = 0,
+parser.add_argument('--beta',                           type=float,     default = 1,
                     help='How much generator\'s curiosity is rewarded.') 
-parser.add_argument('--dis_alpha',                      type=float,     default = 1,
+parser.add_argument('--dis_alpha',                      type=float,     default = 0,
                     help='How much discriminator\'s entropy is punished.') 
-parser.add_argument('--min_dis_std',                    type=float,     default = .9,
+parser.add_argument('--min_dis_std',                    type=float,     default = 0,
                     help='The discriminator\'s goal for standard deviation.') 
 
     # Presentation options
@@ -275,7 +274,7 @@ def make_animation(save_dir, image_name='1.png', output_name='animation_1.gif'):
     
     
 # Plotting losses, entropy, curiosity, etc.
-def plot_vals(plot_vals_dict, save_path='losses.png'):
+def plot_vals(plot_vals_dict, save_path='losses.png', fontsize = 7):
     # Calculate average discriminator losses
     avg_dis_loss_real = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_losses_real"]]
     avg_dis_loss_fake = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_losses_fake"]]
@@ -287,7 +286,8 @@ def plot_vals(plot_vals_dict, save_path='losses.png'):
     
     # Calculate average discriminator mu and std
     avg_mu  = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_mu"]]
-    avg_std = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_std"]]
+    avg_std_fake = [log(sum(epoch)/len(epoch)) for epoch in plot_vals_dict["dis_std_fake"]]
+    avg_std_real = [log(sum(epoch)/len(epoch)) for epoch in plot_vals_dict["dis_std_real"]]
         
     # Define epochs
     epochs = range(1, len(plot_vals_dict["gen_loss"]) + 1)
@@ -305,57 +305,56 @@ def plot_vals(plot_vals_dict, save_path='losses.png'):
     plt.plot(epochs, total_gen_loss, 'black', label="Total", alpha = .8)
     plt.xlabel("Epochs")
     plt.ylabel("Generator Loss")
-    plt.ylim(-10, 20)
+    plt.ylim(-1, 25)
     plt.title("Generator Losses Over Epochs")
-    plt.legend()
+    plt.legend(fontsize=fontsize)
     plt.grid(True)
     
     total_dis_loss = []
     for r, f, c in zip(avg_dis_loss_real, avg_dis_loss_fake, avg_dis_complexity_loss):
         total_dis_loss.append(r + f + c)
     plt.subplot(2, 3, 2)
-    plt.plot(epochs, avg_dis_loss_real, 'red', label="Discriminator Loss (Real)", alpha = .8)
-    plt.plot(epochs, avg_dis_loss_fake, 'purple', label="Discriminator Loss (Fake)", alpha = .8)
-    plt.plot(epochs, avg_dis_complexity_loss, 'blue', label="Loss for Complexity", alpha = .8)
+    plt.plot(epochs, avg_dis_loss_real, 'red', label="Discriminator Loss (real images)", alpha = .8)
+    plt.plot(epochs, avg_dis_loss_fake, 'green', label="Discriminator Loss (fake images)", alpha = .8)
+    #plt.plot(epochs, avg_dis_complexity_loss, 'blue', label="Loss for Complexity", alpha = .8)
     plt.plot(epochs, total_dis_loss, 'black', label="Total", alpha = .8)
     plt.xlabel("Epochs")
     plt.ylabel("Discriminator Loss")
-    plt.ylim(0, 4)
+    plt.ylim(0, 3)
     plt.title("Discriminator Losses Over Epochs")
-    plt.legend()
+    plt.legend(fontsize=fontsize)
     plt.grid(True)
     
     # Plot correct rates
     plt.subplot(2, 3, 3)
-    plt.plot(epochs, avg_correct_rate_real, 'g-', label="Correct Rate (Real)", alpha = .8)
-    plt.plot(epochs, avg_correct_rate_fake, 'r-', label="Correct Rate (Fake)", alpha = .8)
+    plt.plot(epochs, avg_correct_rate_real, 'red', label="Correct Rate (real images)", alpha = .8)
+    plt.plot(epochs, avg_correct_rate_fake, 'green', label="Correct Rate (fake images)", alpha = .8)
     plt.xlabel("Epochs")
     plt.ylabel("Correct Rate")
     plt.ylim(0, 100)
     plt.title("Discriminator Correct Rates Over Epochs")
-    plt.legend()
+    plt.legend(fontsize=fontsize)
     plt.grid(True)
     
-    # Plot generator mu and std
+    # Plot generator std
     plt.subplot(2, 3, 4)
-    plt.plot(epochs, plot_vals_dict["gen_mu"], 'g-', label="Generator Mean", alpha = .8)
-    plt.plot(epochs, plot_vals_dict["gen_std"], 'r-', label="Generator STD", alpha = .8)
+    plt.plot(epochs, plot_vals_dict["gen_std"], 'red', label="Generator STD", alpha = .8)
     plt.xlabel("Epochs")
     plt.ylabel("Value")
-    plt.ylim(-1, 8)
-    plt.title("Generator Mean and STD")
-    plt.legend()
+    plt.ylim(0, 1.3)
+    plt.title("Generator Standard Deviation")
+    plt.legend(fontsize=fontsize)
     plt.grid(True)
     
-    # Plot discriminator mu and std
+    # Plot discriminator stda
     plt.subplot(2, 3, 5)
-    plt.plot(epochs, avg_mu, 'g-', label="Discriminator Mean", alpha = .8)
-    plt.plot(epochs, avg_std, 'r-', label="Discriminator STD", alpha = .8)
+    plt.plot(epochs, avg_std_real, 'red', label="Log Discriminator STD (real images)", alpha = .8)
+    plt.plot(epochs, avg_std_fake, 'green', label="Log Discriminator STD (fake images)", alpha = .8)
     plt.xlabel("Epochs")
     plt.ylabel("Value")
-    plt.ylim(-1, 1)
-    plt.title("Discriminator Mean and STD")
-    plt.legend()
+    plt.ylim(-8, .1)
+    plt.title("Discriminator Standard Deviations")
+    plt.legend(fontsize=fontsize)
     plt.grid(True)
     
     plt.tight_layout()

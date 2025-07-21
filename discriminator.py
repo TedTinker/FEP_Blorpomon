@@ -142,7 +142,7 @@ class Discriminator(nn.Module):
             nn.Conv2d(
                 in_channels = stat_channels, 
                 out_channels = 32,
-                kernel_size = 3,
+                kernel_size = 5,
                 padding = 1,
                 padding_mode = "reflect"),
             nn.BatchNorm2d(32),
@@ -155,7 +155,7 @@ class Discriminator(nn.Module):
             nn.Conv2d(
                 in_channels = 3, 
                 out_channels = 32,
-                kernel_size = 3,
+                kernel_size = 5,
                 padding = 1,
                 padding_mode = "reflect"),
             nn.BatchNorm2d(32),
@@ -218,19 +218,12 @@ class Discriminator(nn.Module):
         self.mu = nn.Sequential(
             nn.Linear(
                 in_features = self.args.inner_state_size, 
-                out_features =  self.args.inner_state_size))
+                out_features = 1))
         self.std = nn.Sequential(
             nn.Linear(
                 in_features = self.args.inner_state_size, 
-                out_features =  self.args.inner_state_size),
+                out_features = 1),
             nn.Softplus())
-        
-        # Final answer.
-        self.c = nn.Sequential(
-            nn.Linear(
-                self.args.inner_state_size, 
-                1),
-            nn.Tanh())
         
         self.apply(init_weights)
         self.to(self.args.device)
@@ -251,15 +244,11 @@ class Discriminator(nn.Module):
         
         # Apply mean and standard deviation.
         mu, std = var(b, self.mu, self.std, self.args)
-        if(self.args.dis_alpha != 0):
-            sampled = sample(mu, std, self.args.device)
-        else:
-            sampled = sample(mu, 0 * std, self.args.device)
+        sampled = sample(mu, std, self.args.device)
         sampled = torch.tanh(sampled)
         
         # Finish.
-        out = self.c(sampled)
-        out = (out + 1) / 2
+        out = (sampled + 1) / 2
         return out, mu, std
 
 
@@ -274,14 +263,7 @@ if(__name__ == "__main__"):
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
         with record_function("model_inference"):
             print(summary(dis, (args.batch_size, 3, args.image_size, args.image_size)))
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
-    
-    
-    
-    def generate_white_to_black_transition(batch_size, height, width, device='cpu'):
-        transition = torch.linspace(1, 0, width).unsqueeze(0).unsqueeze(0).repeat(batch_size, height, 1)
-        transition_tensor = transition.unsqueeze(1).repeat(1, 3, 1, 1).to(device)
-        return transition_tensor
+    #print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
     
     dis(get_random_batch(batch_size = args.batch_size), display = True)
     

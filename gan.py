@@ -40,7 +40,8 @@ class GAN:
             "dis_losses_fake" : [[]],
             "dis_complexity_loss" : [[]],
             "dis_mu" : [[]],
-            "dis_std" : [[]],
+            "dis_std_fake" : [[]],
+            "dis_std_real" : [[]],
             "gen_loss" : [],
             "gen_entropy_loss" : [],
             "gen_curiosity_loss" : [],
@@ -86,20 +87,22 @@ class GAN:
             
             # Process fake images.
             output_fake, mu_fake, std_fake = dis(fake_images.detach())  
-            complexity_fake_loss = ((std_fake - self.args.min_dis_std) ** 2).mean()
+            # I tried a lot of things with these complexity losses. Encouraging, discouraging...
+            # I think the best thing to do is let the discriminators handle complexity all on their own. 
+            complexity_fake_loss = F.relu(self.args.min_dis_std - std_fake).pow(2).mean() 
             correct_fake = ((output_fake < .5) == (fake_labels < .5)).float().mean().item()
             loss_fake = F.binary_cross_entropy(output_fake, fake_labels)
             
             # Process real iamges.
             output_real, mu_real, std_real = dis(real_images)
-            complexity_real_loss = ((std_real - self.args.min_dis_std) ** 2).mean()
+            complexity_real_loss = F.relu(self.args.min_dis_std - std_real).pow(2).mean()
             correct_real = ((output_real > .5) == (real_labels > .5)).float().mean().item()
             loss_real = F.binary_cross_entropy(output_real, real_labels)
             
             # Process loss-values.
             loss = loss_real + loss_fake 
             complexity_loss = self.args.dis_alpha * (complexity_real_loss + complexity_fake_loss)
-            loss += complexity_loss     # Discriminator encouraged to have minimize its entropy.
+            loss += complexity_loss     # Discriminator encouraged to minimize its entropy.
             loss.backward()
             opt.step()
             
@@ -112,7 +115,8 @@ class GAN:
             self.plot_vals_dict["dis_losses_real"][-1].append(loss_real.item())
             self.plot_vals_dict["dis_complexity_loss"][-1].append(complexity_loss.item())
             self.plot_vals_dict["dis_mu"][-1].append((mu_real.mean().item() + mu_fake.mean().item())/2)
-            self.plot_vals_dict["dis_std"][-1].append((std_real.mean().item() + std_fake.mean().item())/2)
+            self.plot_vals_dict["dis_std_real"][-1].append(std_real.mean().item())
+            self.plot_vals_dict["dis_std_fake"][-1].append(std_fake.mean().item())
 
         # Generate images for training generator. Label them as real, so the generator learns to trick discriminator.
         fake_images, mu, std = self.gen()
@@ -161,7 +165,8 @@ class GAN:
         self.plot_vals_dict["dis_correct_rate_fake"].append([])
         self.plot_vals_dict["dis_complexity_loss"].append([])
         self.plot_vals_dict["dis_mu"].append([])
-        self.plot_vals_dict["dis_std"].append([])
+        self.plot_vals_dict["dis_std_fake"].append([])
+        self.plot_vals_dict["dis_std_real"].append([])
         
         self.epochs += 1
         

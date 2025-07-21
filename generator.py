@@ -37,25 +37,8 @@ class Generator(nn.Module):
                 paying_attention = False, 
                 attention_kernel_size = 1,
                 args = default_args),
-            # 8 by 8
-            My_Layer(
-                in_channels = 32, 
-                channels = 32, 
-                kernel_size = 3, 
-                grow_or_shrink = "grow", 
-                paying_attention = True, 
-                attention_kernel_size = 3,
-                args = default_args),
-            # 16 by 16
-            My_Layer(
-                in_channels = 32, 
-                channels = 32, 
-                kernel_size = 3, 
-                grow_or_shrink = "grow", 
-                paying_attention = True, 
-                attention_kernel_size = 3,
-                args = default_args))
-            # 32 by 32
+            # 8 by 8           
+            )
         
         # Mean and standard deviation.
         self.mu = nn.Sequential(
@@ -64,7 +47,7 @@ class Generator(nn.Module):
                 channels = 32, 
                 kernel_size = 3, 
                 grow_or_shrink = "none", 
-                paying_attention = True, 
+                paying_attention = False, 
                 attention_kernel_size = 3,
                 activations = False, 
                 args = default_args))
@@ -75,14 +58,23 @@ class Generator(nn.Module):
                 channels = 32, 
                 kernel_size = 3, 
                 grow_or_shrink = "none", 
-                paying_attention = True, 
+                paying_attention = False, 
                 attention_kernel_size = 3,
                 activations = False, 
                 args = default_args),
             nn.Softplus())
             
-        # CNNs growing image and finishing image. 
+        # CNNs growing image. 
         self.b = nn.Sequential(
+            My_Layer(
+                in_channels = 32, 
+                channels = 32, 
+                kernel_size = 3, 
+                grow_or_shrink = "grow", 
+                paying_attention = False, 
+                attention_kernel_size = 3,
+                args = default_args),
+            # 16 by 16
             My_Layer(
                 in_channels = 32, 
                 channels = 32, 
@@ -91,9 +83,21 @@ class Generator(nn.Module):
                 paying_attention = True, 
                 attention_kernel_size = 3,
                 args = default_args),
-            # 64 by 64                
-            nn.Conv2d(
+            # 32 by 32
+            My_Layer(
                 in_channels = 32, 
+                channels = 32, 
+                kernel_size = 3, 
+                grow_or_shrink = "grow", 
+                paying_attention = True, 
+                attention_kernel_size = 3,
+                args = default_args))
+            # 64 by 64     
+
+        # CNNs growing image and finishing image. 
+        self.c = nn.Sequential(
+            nn.Conv2d(
+                in_channels = 34, 
                 out_channels = 32,
                 kernel_size = 3,
                 padding = 1,
@@ -133,13 +137,19 @@ class Generator(nn.Module):
             
         # Apply mean and standard deviation.
         mu, std = var(a, self.mu, self.std, self.args)
-        if(use_std and self.args.alpha != 0):
+        if(use_std): 
             sampled = sample(mu, std, self.args.device)
         else:
             sampled = sample(mu, 0 * std, self.args.device)
         
         # Finish.
-        out = self.b(sampled)
+        b = self.b(sampled)
+        
+        # Add position layers.
+        h_grad, v_grad = position_layers(b)
+        b = torch.cat([b, h_grad, v_grad], dim = 1)
+        
+        out = self.c(b)
         out = (out + 1) / 2
         
         return out, mu, std

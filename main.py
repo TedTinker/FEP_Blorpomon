@@ -16,7 +16,7 @@ print("\ntitle:\n{}".format(args.arg_title))
 
 
 if __name__ == '__main__':    
-    seed = args.init_seed #  + i
+    seed = args.init_seed 
     np.random.seed(seed) 
     random.seed(seed) 
     torch.manual_seed(seed) 
