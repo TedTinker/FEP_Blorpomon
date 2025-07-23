@@ -1,6 +1,6 @@
 import os 
 
-os.chdir(r"C:\Users\Ted\Desktop\FEP_Blorpomon")
+os.chdir(r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon")
 
 import torch 
 import torch.nn as nn
@@ -143,7 +143,7 @@ class Discriminator(nn.Module):
                 in_channels = stat_channels, 
                 out_channels = 32,
                 kernel_size = 5,
-                padding = 1,
+                padding = 2,
                 padding_mode = "reflect"),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
@@ -156,7 +156,7 @@ class Discriminator(nn.Module):
                 in_channels = 3, 
                 out_channels = 32,
                 kernel_size = 5,
-                padding = 1,
+                padding = 2,
                 padding_mode = "reflect"),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
@@ -183,8 +183,8 @@ class Discriminator(nn.Module):
                 channels = 32, 
                 kernel_size = 3, 
                 grow_or_shrink = "shrink", 
-                paying_attention = False, 
-                attention_kernel_size = 5,
+                paying_attention = True, 
+                attention_kernel_size = 3,
                 args = default_args),
             # 16 by 16
             nn.Dropout2d(p=self.args.dropout),
@@ -193,8 +193,8 @@ class Discriminator(nn.Module):
                 channels = 32, 
                 kernel_size = 3, 
                 grow_or_shrink = "shrink", 
-                paying_attention = False, 
-                attention_kernel_size = 1,
+                paying_attention = True, 
+                attention_kernel_size = 3,
                 args = default_args),
             # 8 by 8
             nn.Dropout2d(p=self.args.dropout),

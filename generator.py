@@ -2,7 +2,7 @@
 
 import os 
 
-os.chdir(r"C:\Users\Ted\Desktop\FEP_Blorpomon")
+os.chdir(r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon")
 
 import torch
 import torch.nn as nn
@@ -78,38 +78,39 @@ class Generator(nn.Module):
             My_Layer(
                 in_channels = 32, 
                 channels = 32, 
-                kernel_size = 3, 
+                kernel_size = 5, 
                 grow_or_shrink = "grow", 
                 paying_attention = True, 
-                attention_kernel_size = 3,
+                attention_kernel_size = 5,
                 args = default_args),
             # 32 by 32
             My_Layer(
                 in_channels = 32, 
                 channels = 32, 
-                kernel_size = 3, 
+                kernel_size = 5, 
                 grow_or_shrink = "grow", 
                 paying_attention = True, 
-                attention_kernel_size = 3,
+                attention_kernel_size = 5,
                 args = default_args))
             # 64 by 64     
 
         # CNNs growing image and finishing image. 
         self.c = nn.Sequential(
-            nn.Conv2d(
+            My_Layer(
                 in_channels = 34, 
-                out_channels = 32,
-                kernel_size = 3,
-                padding = 1,
-                padding_mode = "reflect"),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
+                channels = 32, 
+                kernel_size = 5, 
+                grow_or_shrink = "none", 
+                paying_attention = False, 
+                attention_kernel_size = 5,
+                args = default_args),
             # Finish
             nn.Conv2d(
                 in_channels = 32, 
-                out_channels = 3, 
-                kernel_size=1, 
-                padding=0),  
+                out_channels = 3,
+                kernel_size = 1,
+                padding = 0,
+                padding_mode = "reflect"),
             nn.Tanh())
         
         

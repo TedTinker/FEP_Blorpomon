@@ -3,7 +3,7 @@
 import os
 
 # Your file-location here.
-os.chdir(r"C:\Users\Ted\Desktop\FEP_Blorpomon")
+os.chdir(r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon")
 
 from PIL import Image
 import datetime 
@@ -170,6 +170,21 @@ args.arg_title = get_args_title(default_args, args)
 
 
 
+# Use random seed.
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+set_seed(int(args.init_seed))
+
+
+
 # Collecting pictures.
 transform = transforms.Compose([
     transforms.Resize((args.image_size, args.image_size)),
@@ -211,7 +226,7 @@ def position_layers(x):
 
 # Make pictures, then make gif transitioning between them.
 def show_images_from_tensor(image_tensor, save_path='output_folder', fps=10):
-    save_path = f"C:\\Users\\Ted\\Desktop\\FEP_Blorpomon\\generated_images/{save_path}"
+    save_path = f"C:\\Users\\Ted\\OneDrive\\Desktop\\FEP_Blorpomon\\generated_images/{save_path}"
     os.makedirs(save_path, exist_ok=True)
 
     image_tensor = image_tensor.detach()

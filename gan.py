@@ -1,7 +1,7 @@
 #%% 
 import os
 
-os.chdir(r"C:\Users\Ted\Desktop\FEP_Blorpomon")
+os.chdir(r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon")
 
 import torch 
 from torch.optim import Adam
@@ -185,11 +185,11 @@ class GAN:
             percent_done = str(self.epochs / self.args.epochs)
         # When training is over, make animations across all epochs.
         make_animation(
-            save_dir = r"C:\Users\Ted\Desktop\FEP_Blorpomon\generated_images" + "\\" + f"{self.args.arg_name}",
+            save_dir = r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon\generated_images" + "\\" + f"{self.args.arg_name}",
             image_name='1.png', 
             output_name='through_training.gif')
         make_animation(
-            save_dir = r"C:\Users\Ted\Desktop\FEP_Blorpomon\generated_images" + "\\" + f"{self.args.arg_name}", 
+            save_dir = r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon\generated_images" + "\\" + f"{self.args.arg_name}", 
             image_name='losses.png', 
             output_name='all_losses.gif')
                 
