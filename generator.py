@@ -1,15 +1,18 @@
 #%%
 
 import os 
+from utils import file_location
 
-os.chdir(r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon")
+os.chdir(file_location)
 
 import torch
 import torch.nn as nn
 from torchinfo import summary
 from torch.profiler import profile, record_function, ProfilerActivity
+import torch.nn.functional as F
 
-from utils import default_args, init_weights, var, sample, My_Layer, position_layers
+from utils import default_args
+from utils_for_torch import init_weights, var, sample, My_Layer, position_layers
 
 
 
@@ -73,21 +76,29 @@ class Generator(nn.Module):
                 grow_or_shrink = "grow", 
                 paying_attention = False, 
                 attention_kernel_size = 3,
-                args = default_args),
+                args = default_args))
             # 16 by 16
+            
+        channels_for_pos = 3
+        self.learned_pos_16 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
+        self.c = nn.Sequential(
             My_Layer(
-                in_channels = 32, 
+                in_channels = 32 + 2 + channels_for_pos, 
                 channels = 32, 
                 kernel_size = 5, 
                 grow_or_shrink = "grow", 
                 paying_attention = True, 
                 attention_kernel_size = 5,
-                args = default_args),
+                args = default_args))
             # 32 by 32
+            
+        channels_for_pos = 3
+        self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
+        self.d = nn.Sequential(
             My_Layer(
-                in_channels = 32, 
+                in_channels = 32 + 2 + channels_for_pos, 
                 channels = 32, 
-                kernel_size = 5, 
+                kernel_size = 7, 
                 grow_or_shrink = "grow", 
                 paying_attention = True, 
                 attention_kernel_size = 5,
@@ -95,11 +106,13 @@ class Generator(nn.Module):
             # 64 by 64     
 
         # CNNs growing image and finishing image. 
-        self.c = nn.Sequential(
+        channels_for_pos = 3
+        self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
+        self.finish = nn.Sequential(
             My_Layer(
-                in_channels = 34, 
+                in_channels = 32 + 2 + channels_for_pos, 
                 channels = 32, 
-                kernel_size = 5, 
+                kernel_size = 7, 
                 grow_or_shrink = "none", 
                 paying_attention = False, 
                 attention_kernel_size = 5,
@@ -120,7 +133,7 @@ class Generator(nn.Module):
     def forward(self, seeds = None, use_std = True):
         # Start with seeds.
         if(seeds == None):
-            seeds = torch.stack([torch.randn(self.args.seed_size) for _ in range(self.args.batch_size)], dim = 0).to(self.args.device)
+            seeds = torch.randn(self.args.batch_size, self.args.seed_size, device=self.args.device)
         
         processed_seeds = self.process_seeds(seeds)
         processed_seeds = processed_seeds.view(-1, 32, 4, 4)
@@ -143,14 +156,35 @@ class Generator(nn.Module):
         else:
             sampled = sample(mu, 0 * std, self.args.device)
         
-        # Finish.
+        # Grow.
         b = self.b(sampled)
         
         # Add position layers.
+        pos_16 = self.learned_pos_16.repeat(b.shape[0], 1, 1, 1)
+        pos_16 = F.interpolate(pos_16, scale_factor = 2, mode = "bilinear", align_corners = True)
         h_grad, v_grad = position_layers(b)
-        b = torch.cat([b, h_grad, v_grad], dim = 1)
+        b = torch.cat([b, pos_16, h_grad, v_grad], dim = 1)
         
-        out = self.c(b)
+        # Grow.
+        c = self.c(b)
+        
+        # Add position layers.
+        pos_32 = self.learned_pos_32.repeat(b.shape[0], 1, 1, 1)
+        pos_32 = F.interpolate(pos_32, scale_factor = 2, mode = "bilinear", align_corners = True)
+        h_grad, v_grad = position_layers(c)
+        c = torch.cat([c, pos_32, h_grad, v_grad], dim = 1)
+        
+        # Grow.
+        d = self.d(c)
+        
+        # Add position layers.
+        pos_64 = self.learned_pos_64.repeat(b.shape[0], 1, 1, 1)
+        pos_64 = F.interpolate(pos_64, scale_factor = 4, mode = "bilinear", align_corners = True)
+        h_grad, v_grad = position_layers(d)
+        d = torch.cat([d, pos_64, h_grad, v_grad], dim = 1)
+        
+        # Finish.
+        out = self.finish(d)
         out = (out + 1) / 2
         
         return out, mu, std

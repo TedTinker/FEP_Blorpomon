@@ -3,7 +3,8 @@
 import os
 
 # Your file-location here.
-os.chdir(r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon")
+file_location = r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon"
+os.chdir(file_location)
 
 from PIL import Image
 import datetime 
@@ -13,17 +14,13 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse 
-import math
 import builtins
 from math import exp
 import imageio
 from statistics import log
 
 import torch 
-from torch import nn
 from torchvision import transforms
-from torch.distributions import Normal
-import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("\n\nDevice: {}.\n\n".format(device))
@@ -104,9 +101,9 @@ parser.add_argument("--max_real",                       type=float,     default 
     # Awesome options
 parser.add_argument('--extrinsic',                      type=float,     default = 5,
                     help='Value of extrinsic rewards (generating good pictures).') 
-parser.add_argument('--alpha',                          type=float,     default = .05,
+parser.add_argument('--alpha',                          type=float,     default = 0,
                     help='How much generator\'s entropy is rewarded.') 
-parser.add_argument('--beta',                           type=float,     default = 1,
+parser.add_argument('--beta',                           type=float,     default = 0,
                     help='How much generator\'s curiosity is rewarded.') 
 parser.add_argument('--dis_alpha',                      type=float,     default = 0,
                     help='How much discriminator\'s entropy is punished.') 
@@ -215,13 +212,6 @@ def get_random_batch(all_images_tensor = all_images_tensor, batch_size=64):
     batch_tensor = all_images_tensor[indices]
     return batch_tensor
 
-# How to make layers showing positions.
-def position_layers(x):
-    batch_size, num_channels, height, width = x.size()
-    h_grad = torch.linspace(0, 1, steps=width, device=x.device).view(1, 1, 1, width).expand(batch_size, 1, height, width)
-    v_grad = torch.linspace(0, 1, steps=height, device=x.device).view(1, 1, height, 1).expand(batch_size, 1, height, width)
-    return(h_grad, v_grad)
-    
 
 
 # Make pictures, then make gif transitioning between them.
@@ -270,6 +260,7 @@ def show_images_from_tensor(image_tensor, save_path='output_folder', fps=10):
     
 # Make gifs for epoch-to-epoch progress.
 def make_animation(save_dir, image_name='1.png', output_name='animation_1.gif'):
+    print(f"Animating {image_name}.")
     # Get list of epoch folders sorted by epoch number
     folders = sorted(
         [f for f in os.listdir(save_dir) if f.startswith('epoch_')],
@@ -278,6 +269,7 @@ def make_animation(save_dir, image_name='1.png', output_name='animation_1.gif'):
 
     images = []
     for folder in folders:
+        print(f"Folder {folder}.")
         path = os.path.join(save_dir, folder, image_name)
         if os.path.exists(path):
             images.append(imageio.imread(path))
@@ -378,6 +370,73 @@ def plot_vals(plot_vals_dict, save_path='losses.png', fontsize = 7):
     plt.close()
     
     
+    
+# This seems to be missing one plot each row.
+def plot_positional_layers_gen(gan):
+    with torch.no_grad():
+        pos_layers = [
+            ("learned_pos_16", gan.gen.learned_pos_16),
+            ("learned_pos_32", gan.gen.learned_pos_32),
+            ("learned_pos_64", gan.gen.learned_pos_64)
+        ]
+        rows = len(pos_layers)
+        columns_needed = [tensor.shape[1] for name, tensor in pos_layers]
+        columns = max(columns_needed)
+        fig, axs = plt.subplots(rows, columns, figsize=(1 * columns, 1 * rows))
+    
+        for row_idx in range(rows):
+            name, tensor = pos_layers[row_idx]
+            pos = tensor.squeeze(0).cpu()  # Shape: (C, H, W)
+            for channel_idx in range(columns):
+                if(channel_idx < pos.shape[0]):
+                    ax = axs[row_idx, channel_idx] if tensor.shape[1] > 1 else axs[row_idx]
+                    ax.imshow(pos[channel_idx], cmap='gray', vmin=-1, vmax=1)
+                    ax.axis("off")
+                    for spine in ax.spines.values():
+                        spine.set_edgecolor("black")
+                        spine.set_linewidth(2)
+                else:
+                    ax.set_visible(False)
+    
+        plt.tight_layout()
+        pos_path = file_location + f'/generated_images/{gan.args.arg_name}/epoch_{str(gan.epochs).zfill(5)}/learned_positional_layers_gen.png'
+        os.makedirs(os.path.dirname(pos_path), exist_ok=True)
+        plt.savefig(pos_path)
+        plt.close()
+        
+def plot_positional_layers_dis(gan):
+    with torch.no_grad():
+        pos_layers = [
+            ("learned_pos_64", gan.dis_list[0].learned_pos_64),
+            ("learned_pos_32", gan.dis_list[0].learned_pos_32),
+            ("learned_pos_16", gan.dis_list[0].learned_pos_16)
+        ]
+        rows = len(pos_layers)
+        columns_needed = [tensor.shape[1] for name, tensor in pos_layers]
+        columns = max(columns_needed)
+        fig, axs = plt.subplots(rows, columns, figsize=(1 * columns, 1 * rows))
+    
+        for row_idx in range(rows):
+            name, tensor = pos_layers[row_idx]
+            pos = tensor.squeeze(0).cpu()  # Shape: (C, H, W)
+            for channel_idx in range(columns):
+                if(channel_idx < pos.shape[0]):
+                    ax = axs[row_idx, channel_idx] if tensor.shape[1] > 1 else axs[row_idx]
+                    ax.imshow(pos[channel_idx], cmap='gray', vmin=-1, vmax=1)
+                    ax.axis("off")
+                    for spine in ax.spines.values():
+                        spine.set_edgecolor("black")
+                        spine.set_linewidth(2)
+                else:
+                    ax.set_visible(False)
+    
+        plt.tight_layout()
+        pos_path = file_location + f'/generated_images/{gan.args.arg_name}/epoch_{str(gan.epochs).zfill(5)}/learned_positional_layers_dis.png'
+        os.makedirs(os.path.dirname(pos_path), exist_ok=True)
+        plt.savefig(pos_path)
+        plt.close()
+    
+    
 
 # Quick example.
 if(__name__ == "__main__"):
@@ -385,184 +444,5 @@ if(__name__ == "__main__"):
     batch_tensor = get_random_batch(all_images_tensor, batch_size)
     print("Batch shape:", batch_tensor.shape)
     show_images_from_tensor(batch_tensor)
-    
-
-
-# For making smoothly transitioning seeds.
-def make_fourier_loop(num_frames, latent_dim, num_frequencies=4):
-    t = torch.linspace(0, 2 * math.pi, num_frames, dtype=torch.float32)
-    latent_path = torch.zeros(num_frames, latent_dim)
-    for k in range(1, num_frequencies + 1):
-        a_k = torch.randn(latent_dim) / k
-        b_k = torch.randn(latent_dim) / k
-        latent_path += torch.sin(k * t[:, None]) * a_k + torch.cos(k * t[:, None]) * b_k
-    latent_path = latent_path / latent_path.std()
-    return latent_path
-
-def create_interpolated_tensor(args):
-    return make_fourier_loop(
-        num_frames=args.seeds_used * args.seed_duration,
-        latent_dim=args.seed_size,
-        num_frequencies=4)
-
-
-
-# For starting neural networks.
-def init_weights(m):
-    try:
-        nn.init.xavier_normal_(m.weight)
-        m.bias.data.fill_(0)
-    except: pass
-
-# How to use mean and standard deviation layers.
-def var(x, mu_func, std_func, args):
-    mu = mu_func(x)
-    std = torch.clamp(std_func(x), min = args.std_min, max = args.std_max)
-    return(mu, std)
-
-# How to sample from probability distributions.
-def sample(mu, std, device):
-    e = Normal(0, 1).sample(std.shape).to(device)
-    return(mu + e * std)
-
-
-
-# Attention layers.
-class SelfAttention(nn.Module):
-    def __init__(self, in_channels, kernel_size = 1):
-        super().__init__()
-        padding_size = ((kernel_size-1)//2, (kernel_size-1)//2)
-        self.query = nn.Conv2d(
-            in_channels = in_channels, 
-            out_channels = in_channels // 8, 
-            kernel_size = kernel_size, 
-            padding = padding_size, 
-            padding_mode = "reflect")
-        self.key   = nn.Conv2d(
-            in_channels = in_channels, 
-            out_channels = in_channels // 8, 
-            kernel_size = kernel_size, 
-            padding = padding_size, 
-            padding_mode = "reflect")
-        self.value = nn.Conv2d(
-            in_channels = in_channels, 
-            out_channels = in_channels, 
-            kernel_size = kernel_size, 
-            padding = padding_size, 
-            padding_mode = "reflect")
-        self.gamma = nn.Parameter(torch.zeros(1))
-
-    def forward(self, x):
-        B, C, H, W = x.size()
-        proj_query = self.query(x).view(B, -1, H * W).permute(0, 2, 1)   # B x HW x C'
-        proj_key   = self.key(x).view(B, -1, H * W)                      # B x C' x HW
-        energy     = torch.bmm(proj_query, proj_key)                    # B x HW x HW
-        attention  = F.softmax(energy, dim=-1)
-        proj_value = self.value(x).view(B, -1, H * W)                   # B x C x HW
-        out = torch.bmm(proj_value, attention.permute(0, 2, 1))        # B x C x HW
-        out = out.view(B, C, H, W)
-        return self.gamma * out + x
-    
-    
-    
-# My personal kind of layer. Allows growing, shrinking, and attention.
-class My_Layer(nn.Module):
-    def __init__(self, 
-                 in_channels = 32, 
-                 channels = 32, 
-                 kernel_size = 3, 
-                 grow_or_shrink = "none", 
-                 paying_attention = False, 
-                 attention_kernel_size = 1, 
-                 activations = True, 
-                 args = default_args):
-        super(My_Layer, self).__init__()
-        
-        self.args = args
-        self.grow_or_shrink = grow_or_shrink
-        self.paying_attention = paying_attention
-        
-        mid_channels = channels
-        if(grow_or_shrink == "shrink" and paying_attention):
-            mid_channels = in_channels
-        if(grow_or_shrink in ["none", "grow"]):
-            mid_channels = in_channels
-        
-        padding_size = ((kernel_size-1)//2, (kernel_size-1)//2)
-        
-        if(grow_or_shrink in ["none", "grow"]):
-            self.x_in = nn.Sequential(
-                nn.Conv2d(
-                    in_channels = in_channels, 
-                    out_channels = mid_channels,
-                    kernel_size = kernel_size,
-                    padding = padding_size,
-                    padding_mode = "reflect"),
-                nn.BatchNorm2d(mid_channels),
-                nn.LeakyReLU())
-            
-        if(grow_or_shrink == "shrink"):
-            self.x_in = nn.Sequential(
-                nn.Conv2d(
-                    in_channels = in_channels, 
-                    out_channels = mid_channels,
-                    kernel_size = kernel_size,
-                    padding = padding_size,
-                    padding_mode = "reflect"),
-                nn.MaxPool2d(
-                    kernel_size = 2,
-                    stride = 2),
-                nn.BatchNorm2d(mid_channels),
-                nn.LeakyReLU())
-        
-        
-        
-        if(paying_attention):
-            self.attention = nn.Sequential(
-                SelfAttention(
-                    in_channels,
-                    attention_kernel_size))
-            
-            
-            
-        if(grow_or_shrink in ["none", "shrink"]):
-            self.x_out = nn.Sequential(
-                nn.Conv2d(
-                    in_channels = mid_channels, 
-                    out_channels = channels,
-                    kernel_size = kernel_size,
-                    padding = padding_size,
-                    padding_mode = "reflect"))
-            
-        if(grow_or_shrink == "grow"):
-            self.x_out = nn.Sequential(
-                nn.Conv2d(
-                    in_channels = mid_channels, 
-                    out_channels = channels,
-                    kernel_size = kernel_size,
-                    padding = padding_size,
-                    padding_mode = "reflect"),
-                nn.Upsample(
-                    scale_factor = 2,
-                    mode = "bilinear",
-                    align_corners = True))
-            
-        if(activations):
-            self.activations = nn.Sequential(
-                nn.BatchNorm2d(channels),
-                nn.LeakyReLU())
-        else:
-            self.activations = nn.Sequential()
-    
-    def forward(self, x):
-        x_2 = self.x_in(x)
-        if(self.paying_attention):
-            if(self.grow_or_shrink == "shrink"):
-                x = F.max_pool2d(input = x, kernel_size = 2, stride = 2)
-            attention = self.attention(x)
-            x_2 = x_2 + attention
-        x = self.x_out(x_2)
-        x = self.activations(x)
-        return x
     
 # %%

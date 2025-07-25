@@ -1,13 +1,15 @@
 #%% 
 import os
-
-os.chdir(r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon")
+from utils import file_location
+os.chdir(file_location)
 
 import torch 
 from torch.optim import Adam
 import torch.nn.functional as F
 
-from utils import default_args, get_random_batch, create_interpolated_tensor, show_images_from_tensor, plot_vals, print, duration, make_animation
+from utils import default_args, plot_positional_layers_gen, plot_positional_layers_dis, get_random_batch, \
+    show_images_from_tensor, plot_vals, print, duration, make_animation
+from utils_for_torch import create_interpolated_tensor
 from generator import Generator
 from discriminator import Discriminator
 
@@ -154,6 +156,8 @@ class GAN:
         if(self.epochs % self.args.epochs_per_vid == 0):
             self.make_images_with_seeds()
             plot_vals(self.plot_vals_dict, save_path = f'{self.args.arg_name}/epoch_{str(self.epochs).zfill(5)}/losses.png')
+            plot_positional_layers_gen(self)
+            plot_positional_layers_dis(self)
             print(duration())
             
             torch.cuda.empty_cache()
@@ -192,6 +196,14 @@ class GAN:
             save_dir = r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon\generated_images" + "\\" + f"{self.args.arg_name}", 
             image_name='losses.png', 
             output_name='all_losses.gif')
+        make_animation(
+            save_dir = r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon\generated_images" + "\\" + f"{self.args.arg_name}",
+            image_name = "learned_positional_layers_gen.png",
+            output_name = "learned_positional_layers_gen.gif")
+        make_animation(
+            save_dir = r"C:\Users\Ted\OneDrive\Desktop\FEP_Blorpomon\generated_images" + "\\" + f"{self.args.arg_name}",
+            image_name = "learned_positional_layers_dis.png",
+            output_name = "learned_positional_layers_dis.gif")
                 
         
         
@@ -201,5 +213,6 @@ if(__name__ == "__main__"):
     gan.training()
     
     
-    
+
+
     
