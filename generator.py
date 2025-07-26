@@ -12,7 +12,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import torch.nn.functional as F
 
 from utils import default_args
-from utils_for_torch import init_weights, var, sample, My_Layer, position_layers
+from utils_for_torch import init_weights, var, sample, CNN_Attention_Blend
 
 
 
@@ -32,11 +32,12 @@ class Generator(nn.Module):
         # CNNs growing image size.
         self.a = nn.Sequential(
             # 4 by 4
-            My_Layer(
-                in_channels = 34, 
+            CNN_Attention_Blend(
+                in_channels = 32, 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "grow", 
+                grow = True,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 1,
                 args = default_args),
@@ -45,22 +46,24 @@ class Generator(nn.Module):
         
         # Mean and standard deviation.
         self.mu = nn.Sequential(
-            My_Layer(
-                in_channels = 34, 
+            CNN_Attention_Blend(
+                in_channels = 32, 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "none", 
+                grow = False,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 3,
                 activations = False, 
                 args = default_args))
         
         self.std = nn.Sequential(
-            My_Layer(
-                in_channels = 34, 
+            CNN_Attention_Blend(
+                in_channels = 32, 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "none", 
+                grow = False,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 3,
                 activations = False, 
@@ -69,11 +72,12 @@ class Generator(nn.Module):
             
         # CNNs growing image. 
         self.b = nn.Sequential(
-            My_Layer(
+            CNN_Attention_Blend(
                 in_channels = 32, 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "grow", 
+                grow = True,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 3,
                 args = default_args))
@@ -82,11 +86,12 @@ class Generator(nn.Module):
         channels_for_pos = 3
         self.learned_pos_16 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
         self.c = nn.Sequential(
-            My_Layer(
-                in_channels = 32 + 2 + channels_for_pos, 
+            CNN_Attention_Blend(
+                in_channels = 32 + channels_for_pos, 
                 channels = 32, 
                 kernel_size = 5, 
-                grow_or_shrink = "grow", 
+                grow = True,
+                shrink = False,
                 paying_attention = True, 
                 attention_kernel_size = 5,
                 args = default_args))
@@ -95,11 +100,12 @@ class Generator(nn.Module):
         channels_for_pos = 3
         self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
         self.d = nn.Sequential(
-            My_Layer(
-                in_channels = 32 + 2 + channels_for_pos, 
+            CNN_Attention_Blend(
+                in_channels = 32 + channels_for_pos, 
                 channels = 32, 
                 kernel_size = 7, 
-                grow_or_shrink = "grow", 
+                grow = True,
+                shrink = False,
                 paying_attention = True, 
                 attention_kernel_size = 5,
                 args = default_args))
@@ -109,11 +115,12 @@ class Generator(nn.Module):
         channels_for_pos = 3
         self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
         self.finish = nn.Sequential(
-            My_Layer(
-                in_channels = 32 + 2 + channels_for_pos, 
+            CNN_Attention_Blend(
+                in_channels = 32 + channels_for_pos, 
                 channels = 32, 
                 kernel_size = 7, 
-                grow_or_shrink = "none", 
+                grow = False,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 5,
                 args = default_args),
@@ -137,18 +144,10 @@ class Generator(nn.Module):
         
         processed_seeds = self.process_seeds(seeds)
         processed_seeds = processed_seeds.view(-1, 32, 4, 4)
-        
-        # Add position layers.
-        h_grad, v_grad = position_layers(processed_seeds)
-        processed_seeds = torch.cat([processed_seeds, h_grad, v_grad], dim = 1)
-        
+                
         # Grow.
         a = self.a(processed_seeds)
-        
-        # Add position layers.
-        h_grad, v_grad = position_layers(a)
-        a = torch.cat([a, h_grad, v_grad], dim = 1)
-            
+                    
         # Apply mean and standard deviation.
         mu, std = var(a, self.mu, self.std, self.args)
         if(use_std): 
@@ -162,8 +161,7 @@ class Generator(nn.Module):
         # Add position layers.
         pos_16 = self.learned_pos_16.repeat(b.shape[0], 1, 1, 1)
         pos_16 = F.interpolate(pos_16, scale_factor = 2, mode = "bilinear", align_corners = True)
-        h_grad, v_grad = position_layers(b)
-        b = torch.cat([b, pos_16, h_grad, v_grad], dim = 1)
+        b = torch.cat([b, pos_16], dim = 1)
         
         # Grow.
         c = self.c(b)
@@ -171,8 +169,7 @@ class Generator(nn.Module):
         # Add position layers.
         pos_32 = self.learned_pos_32.repeat(b.shape[0], 1, 1, 1)
         pos_32 = F.interpolate(pos_32, scale_factor = 2, mode = "bilinear", align_corners = True)
-        h_grad, v_grad = position_layers(c)
-        c = torch.cat([c, pos_32, h_grad, v_grad], dim = 1)
+        c = torch.cat([c, pos_32], dim = 1)
         
         # Grow.
         d = self.d(c)
@@ -180,8 +177,7 @@ class Generator(nn.Module):
         # Add position layers.
         pos_64 = self.learned_pos_64.repeat(b.shape[0], 1, 1, 1)
         pos_64 = F.interpolate(pos_64, scale_factor = 4, mode = "bilinear", align_corners = True)
-        h_grad, v_grad = position_layers(d)
-        d = torch.cat([d, pos_64, h_grad, v_grad], dim = 1)
+        d = torch.cat([d, pos_64], dim = 1)
         
         # Finish.
         out = self.finish(d)
@@ -201,5 +197,5 @@ if(__name__ == "__main__"):
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
         with record_function("model_inference"):
             print(summary(gen, (args.batch_size, default_args.seed_size)))
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
+    #print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
 # %%

@@ -15,7 +15,7 @@ from io import BytesIO
 from PIL import Image
 
 from utils import get_random_batch, default_args
-from utils_for_torch import init_weights, var, sample, My_Layer, position_layers
+from utils_for_torch import init_weights, var, sample, CNN_Attention_Blend
 
 
 
@@ -60,9 +60,6 @@ def get_stats(x, args, display = False):
     batch_size, num_channels, height, width = x.size()
     x_flat = x.view(x.size(0), x.size(1), -1)  # (batch, channels, height * width)
     to_cat = []
-    
-    #h_grad, v_grad = position_layers(x)
-    #to_cat.extend([h_grad, v_grad])
 
     batch_quantiles = [torch.quantile(x, q, dim=0, keepdim=True) for q in quantiles] # (1, channels, width, height)
     batch_quantiles_tiled = [q.repeat(batch_size, 1, 1, 1) for q in batch_quantiles]
@@ -138,14 +135,6 @@ class Discriminator(nn.Module):
         
         # This is my kludgey way to get the number of channels layers should have.
         example = torch.zeros(self.args.batch_size, 3, self.args.image_size, self.args.image_size)
-        h_grad, v_grad = position_layers(example)
-        example = torch.cat([example,  h_grad, v_grad], dim = 1)
-        
-        channels_for_pos = 3
-        self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
-        pos_64 = self.learned_pos_64.repeat(example.shape[0], 1, 1, 1)
-        pos_64 = F.interpolate(pos_64, scale_factor = 4, mode = "bilinear", align_corners = True)
-        example = torch.cat([example, pos_64], dim = 1)
         
         stats = get_stats(example, self.args).cpu()
         stat_channels = stats.shape[1]
@@ -166,7 +155,7 @@ class Discriminator(nn.Module):
         # Process images.
         self.images = nn.Sequential(
             nn.Conv2d(
-                in_channels = 3 + 2 + channels_for_pos, 
+                in_channels = 3, 
                 out_channels = 32,
                 kernel_size = 7,
                 padding = 3,
@@ -181,32 +170,28 @@ class Discriminator(nn.Module):
         self.a = nn.Sequential(
             # 64 by 64
             nn.Dropout2d(p=self.args.dropout),
-            My_Layer(
+            CNN_Attention_Blend(
                 in_channels = 64, 
                 channels = 32, 
                 kernel_size = 7, 
-                grow_or_shrink = "shrink", 
+                grow = False,
+                shrink = True,
                 paying_attention = False, 
                 attention_kernel_size = 5,
                 args = default_args),
             nn.Dropout2d(p=self.args.dropout))
         
         example = self.a(example)
-        channels_for_pos = 3
-        self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
-        pos_32 = self.learned_pos_32.repeat(example.shape[0], 1, 1, 1)
-        pos_32 = F.interpolate(pos_32, scale_factor = 2, mode = "bilinear", align_corners = True)
-        h_grad, v_grad = position_layers(example)
-        example = torch.cat([example, pos_32, h_grad, v_grad], dim = 1)
         
         self.b = nn.Sequential(
             # 32 by 32
             nn.Dropout2d(p=self.args.dropout),
-            My_Layer(
-                in_channels = 32 + 2 + channels_for_pos, 
+            CNN_Attention_Blend(
+                in_channels = 32, 
                 channels = 32, 
                 kernel_size = 7, 
-                grow_or_shrink = "shrink", 
+                grow = False,
+                shrink = True,
                 paying_attention = True, 
                 attention_kernel_size = 3,
                 args = default_args),
@@ -214,29 +199,25 @@ class Discriminator(nn.Module):
             # 16 by 16
             
         example = self.b(example)
-        channels_for_pos = 3
-        self.learned_pos_16 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
-        pos_16 = self.learned_pos_16.repeat(example.shape[0], 1, 1, 1)
-        pos_16 = F.interpolate(pos_16, scale_factor = 2, mode = "bilinear", align_corners = True)
-        h_grad, v_grad = position_layers(example)
-        example = torch.cat([example, pos_16, h_grad, v_grad], dim = 1)
             
         self.c = nn.Sequential(
-            My_Layer(
-                in_channels = 32 + 2 + channels_for_pos, 
+            CNN_Attention_Blend(
+                in_channels = 32, 
                 channels = 32, 
                 kernel_size = 5, 
-                grow_or_shrink = "shrink", 
+                grow = False,
+                shrink = True,
                 paying_attention = True, 
                 attention_kernel_size = 3,
                 args = default_args),
             # 8 by 8
             nn.Dropout2d(p=self.args.dropout),
-            My_Layer(
+            CNN_Attention_Blend(
                 in_channels = 32, 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "shrink", 
+                grow = False,
+                shrink = True,
                 paying_attention = False, 
                 attention_kernel_size = 1,
                 args = default_args))
@@ -267,12 +248,6 @@ class Discriminator(nn.Module):
     def forward(self, images, display = False):
         batch_size, num_channels, height, width = images.size()
         images = (images * 2) - 1
-        
-        # Add position layers.
-        h_grad, v_grad = position_layers(images)
-        pos_64 = self.learned_pos_64.repeat(images.shape[0], 1, 1, 1)
-        pos_64 = F.interpolate(pos_64, scale_factor = 4, mode = "bilinear", align_corners = True)
-        images = torch.cat([images, pos_64, h_grad, v_grad], dim = 1)
                         
         # Process statistics and images.
         stats = get_stats(images, self.args, display)
@@ -282,19 +257,7 @@ class Discriminator(nn.Module):
     
         # Shrinking and flattening.
         a = self.a(images)
-        
-        # Add position layers.
-        pos_32 = self.learned_pos_32.repeat(a.shape[0], 1, 1, 1)
-        pos_32 = F.interpolate(pos_32, scale_factor = 2, mode = "bilinear", align_corners = True)
-        h_grad, v_grad = position_layers(a)
-        a = torch.cat([a, pos_32, h_grad, v_grad], dim = 1)
         b = self.b(a)
-        
-        # Add position layers.
-        pos_16 = self.learned_pos_16.repeat(a.shape[0], 1, 1, 1)
-        pos_16 = F.interpolate(pos_16, scale_factor = 2, mode = "bilinear", align_corners = True)
-        h_grad, v_grad = position_layers(b)
-        b = torch.cat([b, pos_16, h_grad, v_grad], dim = 1)
         c = self.c(b)
         
         # Flatten.
@@ -323,7 +286,7 @@ if(__name__ == "__main__"):
             print(summary(dis, (args.batch_size, 3, args.image_size, args.image_size)))
     #print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
     
-    dis(get_random_batch(batch_size = args.batch_size), display = True)
+    #dis(get_random_batch(batch_size = args.batch_size), display = True)
     
     
 

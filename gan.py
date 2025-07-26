@@ -156,8 +156,8 @@ class GAN:
         if(self.epochs % self.args.epochs_per_vid == 0):
             self.make_images_with_seeds()
             plot_vals(self.plot_vals_dict, save_path = f'{self.args.arg_name}/epoch_{str(self.epochs).zfill(5)}/losses.png')
-            plot_positional_layers_gen(self)
-            plot_positional_layers_dis(self)
+            #plot_positional_layers_gen(self)
+            #plot_positional_layers_dis(self)
             print(duration())
             
             torch.cuda.empty_cache()
