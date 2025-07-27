@@ -22,12 +22,19 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         
         self.args = args
+        
+        # This is my kludgey way to get the number of channels layers should have.
+        example = torch.zeros(self.args.batch_size, self.args.seed_size)
+        print("GEN START:", example.shape)
                      
         # From seeds to tensor for CNN.
         self.process_seeds = nn.Sequential(
             nn.Linear(
                 in_features = self.args.seed_size, 
                 out_features =  32 * 4 * 4))
+        
+        example = self.process_seeds(example).view(-1, 32, 4, 4)
+        print("GEN process_seeds:", example.shape)
         
         # CNNs growing image size.
         self.a = nn.Sequential(
@@ -43,6 +50,9 @@ class Generator(nn.Module):
                 args = default_args),
             # 8 by 8           
             )
+        
+        example = self.a(example)
+        print("GEN a:", example.shape)
         
         # Mean and standard deviation.
         self.mu = nn.Sequential(
@@ -69,6 +79,11 @@ class Generator(nn.Module):
                 activations = False, 
                 args = default_args),
             nn.Softplus())
+        
+        example_mu = self.mu(example)
+        example_std = self.std(example)
+        example = sample(example_mu, example_std)
+        print("GEN a:", example.shape)
             
         # CNNs growing image. 
         self.b = nn.Sequential(
@@ -82,6 +97,9 @@ class Generator(nn.Module):
                 attention_kernel_size = 3,
                 args = default_args))
             # 16 by 16
+            
+        example = self.b(example)
+        print("GEN b:", example.shape)
             
         channels_for_pos = 3
         self.learned_pos_16 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
@@ -151,9 +169,9 @@ class Generator(nn.Module):
         # Apply mean and standard deviation.
         mu, std = var(a, self.mu, self.std, self.args)
         if(use_std): 
-            sampled = sample(mu, std, self.args.device)
+            sampled = sample(mu, std)
         else:
-            sampled = sample(mu, 0 * std, self.args.device)
+            sampled = sample(mu, 0 * std)
         
         # Grow.
         b = self.b(sampled)

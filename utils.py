@@ -403,38 +403,6 @@ def plot_positional_layers_gen(gan):
         os.makedirs(os.path.dirname(pos_path), exist_ok=True)
         plt.savefig(pos_path)
         plt.close()
-        
-def plot_positional_layers_dis(gan):
-    with torch.no_grad():
-        pos_layers = [
-            ("learned_pos_64", gan.dis_list[0].learned_pos_64),
-            ("learned_pos_32", gan.dis_list[0].learned_pos_32),
-            ("learned_pos_16", gan.dis_list[0].learned_pos_16)
-        ]
-        rows = len(pos_layers)
-        columns_needed = [tensor.shape[1] for name, tensor in pos_layers]
-        columns = max(columns_needed)
-        fig, axs = plt.subplots(rows, columns, figsize=(1 * columns, 1 * rows))
-    
-        for row_idx in range(rows):
-            name, tensor = pos_layers[row_idx]
-            pos = tensor.squeeze(0).cpu()  # Shape: (C, H, W)
-            for channel_idx in range(columns):
-                if(channel_idx < pos.shape[0]):
-                    ax = axs[row_idx, channel_idx] if tensor.shape[1] > 1 else axs[row_idx]
-                    ax.imshow(pos[channel_idx], cmap='gray', vmin=-1, vmax=1)
-                    ax.axis("off")
-                    for spine in ax.spines.values():
-                        spine.set_edgecolor("black")
-                        spine.set_linewidth(2)
-                else:
-                    ax.set_visible(False)
-    
-        plt.tight_layout()
-        pos_path = file_location + f'/generated_images/{gan.args.arg_name}/epoch_{str(gan.epochs).zfill(5)}/learned_positional_layers_dis.png'
-        os.makedirs(os.path.dirname(pos_path), exist_ok=True)
-        plt.savefig(pos_path)
-        plt.close()
     
     
 
