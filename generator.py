@@ -41,13 +41,14 @@ class Generator(nn.Module):
             # 4 by 4
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 3, 
                 grow = True,
                 shrink = False,
                 paying_attention = False, 
-                attention_kernel_size = 1,
                 args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU()
             # 8 by 8           
             )
         
@@ -58,25 +59,23 @@ class Generator(nn.Module):
         self.mu = nn.Sequential(
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 3, 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 3,
-                activations = False, 
                 args = default_args))
         
         self.std = nn.Sequential(
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 3, 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 3,
-                activations = False, 
                 args = default_args),
             nn.Softplus())
         
@@ -88,13 +87,14 @@ class Generator(nn.Module):
         self.b = nn.Sequential(
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 3, 
                 grow = True,
                 shrink = False,
                 paying_attention = False, 
-                attention_kernel_size = 3,
-                args = default_args))
+                args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU())
             # 16 by 16
             
         example = self.b(example)
@@ -106,13 +106,15 @@ class Generator(nn.Module):
         self.c = nn.Sequential(
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 5, 
                 grow = True,
                 shrink = False,
                 paying_attention = True, 
                 attention_kernel_size = 5,
-                args = default_args))
+                args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU())
             # 32 by 32
             
         example = self.c(example)
@@ -124,13 +126,15 @@ class Generator(nn.Module):
         self.d = nn.Sequential(
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 7, 
                 grow = True,
                 shrink = False, 
                 paying_attention = True, 
-                attention_kernel_size = 5,
-                args = default_args))
+                attention_kernel_size = 7,
+                args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU())
             # 64 by 64     
 
         example = self.d(example)
@@ -143,13 +147,14 @@ class Generator(nn.Module):
         self.finish = nn.Sequential(
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 7, 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
-                attention_kernel_size = 5,
                 args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
             # Finish
             nn.Conv2d(
                 in_channels = 32, 

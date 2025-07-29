@@ -224,13 +224,12 @@ class SelfAttention(nn.Module):
 class CNN_Attention_Blend(nn.Module):
     def __init__(self, 
                  in_shape = (16, 16, 16, 16), 
-                 channels = 32, 
+                 out_channels = 32, 
                  kernel_size = 3, 
                  grow = False,
                  shrink = False, 
                  paying_attention = False, 
                  attention_kernel_size = 1, 
-                 activations = True, 
                  args = default_args):
         super(CNN_Attention_Blend, self).__init__()
         
@@ -241,7 +240,7 @@ class CNN_Attention_Blend(nn.Module):
         example = torch.zeros(in_shape)
         print("Start of CAB:", example.shape)
         
-        mid_channels = channels
+        mid_channels = out_channels
         if(self.shrink and paying_attention):
             mid_channels = in_shape[1]
         if(self.grow or (not self.grow and not self.shrink)):
@@ -283,9 +282,7 @@ class CNN_Attention_Blend(nn.Module):
         
         if(paying_attention):
             self.attention = nn.Sequential(
-                SelfAttention(
-                    example.shape[1],
-                    attention_kernel_size))
+                SelfAttention(in_channels = example.shape[1], kernel_size = attention_kernel_size))
             
             example = self.attention(example)
             print("CAB attention:", example.shape)
@@ -296,7 +293,7 @@ class CNN_Attention_Blend(nn.Module):
             self.x_out = nn.Sequential(
                 nn.Conv2d(
                     in_channels = example.shape[1], 
-                    out_channels = channels,
+                    out_channels = out_channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"))
@@ -308,7 +305,7 @@ class CNN_Attention_Blend(nn.Module):
             self.x_out = nn.Sequential(
                 nn.Conv2d(
                     in_channels = example.shape[1],
-                    out_channels = channels,
+                    out_channels = out_channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"),
@@ -319,13 +316,6 @@ class CNN_Attention_Blend(nn.Module):
             
             example = self.x_out(example)
             print("CAB out (grow):", example.shape)
-            
-        if(activations):
-            self.activations = nn.Sequential(
-                nn.BatchNorm2d(channels),
-                nn.LeakyReLU())
-        else:
-            self.activations = nn.Sequential()
     
     def forward(self, x):
         x_2 = self.x_in(x)
@@ -336,5 +326,4 @@ class CNN_Attention_Blend(nn.Module):
             attention = self.attention(x)
             x_2 = x_2 + attention
         x = self.x_out(x_2)
-        x = self.activations(x)
         return x

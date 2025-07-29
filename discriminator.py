@@ -69,13 +69,14 @@ class Discriminator(nn.Module):
             nn.Dropout2d(p=self.args.dropout),
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 7, 
                 grow = False,
                 shrink = True, 
                 paying_attention = False, 
-                attention_kernel_size = 5,
                 args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
             nn.Dropout2d(p=self.args.dropout))
         
         example = self.a(example)
@@ -89,13 +90,15 @@ class Discriminator(nn.Module):
             nn.Dropout2d(p=self.args.dropout),
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 7, 
                 grow = False,
                 shrink = True, 
                 paying_attention = True, 
-                attention_kernel_size = 3,
+                attention_kernel_size = 7,
                 args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
             nn.Dropout2d(p=self.args.dropout),)
             # 16 by 16
             
@@ -108,24 +111,27 @@ class Discriminator(nn.Module):
         self.c = nn.Sequential(
             CNN_Attention_Blend(
                 in_shape = example.shape, 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 5, 
                 grow = False,
                 shrink = True, 
                 paying_attention = True, 
-                attention_kernel_size = 3,
+                attention_kernel_size = 5,
                 args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
             # 8 by 8
             nn.Dropout2d(p=self.args.dropout),
             CNN_Attention_Blend(
                 in_shape = (example.shape[0], 32, example.shape[2], example.shape[3]), 
-                channels = 32, 
+                out_channels = 32, 
                 kernel_size = 3, 
                 grow = False,
                 shrink = True, 
                 paying_attention = False, 
-                attention_kernel_size = 1,
-                args = default_args))
+                args = default_args),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU())
             # 4 by 4
                 
         example = self.c(example).view(self.args.batch_size, -1)
