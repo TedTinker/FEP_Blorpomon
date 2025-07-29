@@ -223,7 +223,7 @@ class SelfAttention(nn.Module):
 # My personal kind of layer. Allows growing, shrinking, and attention.
 class CNN_Attention_Blend(nn.Module):
     def __init__(self, 
-                 in_channels = 32, 
+                 in_shape = (16, 16, 16, 16), 
                  channels = 32, 
                  kernel_size = 3, 
                  grow = False,
@@ -238,14 +238,14 @@ class CNN_Attention_Blend(nn.Module):
         self.__dict__.update({k: v for k, v in locals().items() if k != 'self'})
         
         # This is my kludgey way to see qualities that layers should have.
-        example = torch.zeros(self.args.batch_size, in_channels, 8, 8)
+        example = torch.zeros(in_shape)
         print("Start of CAB:", example.shape)
         
         mid_channels = channels
         if(self.shrink and paying_attention):
-            mid_channels = in_channels
+            mid_channels = in_shape[1]
         if(self.grow or (not self.grow and not self.shrink)):
-            mid_channels = in_channels
+            mid_channels = in_shape[1]
         
         padding_size = ((kernel_size-1)//2, (kernel_size-1)//2)
         

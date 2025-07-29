@@ -40,7 +40,7 @@ class Generator(nn.Module):
         self.a = nn.Sequential(
             # 4 by 4
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 3, 
                 grow = True,
@@ -57,7 +57,7 @@ class Generator(nn.Module):
         # Mean and standard deviation.
         self.mu = nn.Sequential(
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 3, 
                 grow = False,
@@ -69,7 +69,7 @@ class Generator(nn.Module):
         
         self.std = nn.Sequential(
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 3, 
                 grow = False,
@@ -87,7 +87,7 @@ class Generator(nn.Module):
         # CNNs growing image. 
         self.b = nn.Sequential(
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 3, 
                 grow = True,
@@ -105,7 +105,7 @@ class Generator(nn.Module):
         
         self.c = nn.Sequential(
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 5, 
                 grow = True,
@@ -123,7 +123,7 @@ class Generator(nn.Module):
         
         self.d = nn.Sequential(
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 7, 
                 grow = True,
@@ -142,7 +142,7 @@ class Generator(nn.Module):
         # CNNs growing image and finishing image.         
         self.finish = nn.Sequential(
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 7, 
                 grow = False,

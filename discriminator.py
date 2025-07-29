@@ -63,13 +63,12 @@ class Discriminator(nn.Module):
         example = torch.cat([example_image, example_stats], dim = 1)
         print("Dis stats and image:", example.shape)
 
-        
         # CNNs shrinking image size.
         self.a = nn.Sequential(
             # 64 by 64
             nn.Dropout2d(p=self.args.dropout),
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 7, 
                 grow = False,
@@ -89,7 +88,7 @@ class Discriminator(nn.Module):
             # 32 by 32
             nn.Dropout2d(p=self.args.dropout),
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 7, 
                 grow = False,
@@ -108,7 +107,7 @@ class Discriminator(nn.Module):
         
         self.c = nn.Sequential(
             CNN_Attention_Blend(
-                in_channels = example.shape[1], 
+                in_shape = example.shape, 
                 channels = 32, 
                 kernel_size = 5, 
                 grow = False,
@@ -119,7 +118,7 @@ class Discriminator(nn.Module):
             # 8 by 8
             nn.Dropout2d(p=self.args.dropout),
             CNN_Attention_Blend(
-                in_channels = 32, 
+                in_shape = (example.shape[0], 32, example.shape[2], example.shape[3]), 
                 channels = 32, 
                 kernel_size = 3, 
                 grow = False,
