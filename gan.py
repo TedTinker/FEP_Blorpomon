@@ -7,7 +7,7 @@ import torch
 from torch.optim import Adam
 import torch.nn.functional as F
 
-from utils import default_args, plot_positional_layers_gen, get_random_batch, \
+from utils import default_args, plot_positional_layers_gen, plot_positional_layers_dis, get_random_batch, \
     show_images_from_tensor, plot_vals, print, duration, make_animation
 from utils_for_torch import create_interpolated_tensor
 from generator import Generator
@@ -157,6 +157,7 @@ class GAN:
             self.make_images_with_seeds()
             plot_vals(self.plot_vals_dict, save_path = f'{self.args.arg_name}/epoch_{str(self.epochs).zfill(5)}/losses.png')
             plot_positional_layers_gen(self)
+            plot_positional_layers_dis(self)
             print(duration())
             
             torch.cuda.empty_cache()

@@ -24,9 +24,71 @@ def var(x, mu_func, std_func, args):
     return(mu, std)
 
 # How to sample from probability distributions.
-def sample(mu, std):
-    e = Normal(0, 1).sample(std.shape).to(std.device)
+def sample(mu, std, device):
+    e = Normal(0, 1).sample(std.shape).to(device)
     return(mu + e * std)
+
+
+
+# Collecting statistics from batch.
+def get_stats(x, args):
+    quantiles = args.stat_quantiles
+    batch_size, num_channels, height, width = x.size()
+    x_flat = x.view(x.size(0), x.size(1), -1)  # (batch, channels, height * width)
+    to_cat = []
+    
+    #h_grad, v_grad = position_layers(x)
+    #to_cat.extend([h_grad, v_grad])
+
+    batch_quantiles = [torch.quantile(x, q, dim=0, keepdim=True) for q in quantiles] # (1, channels, width, height)
+    batch_quantiles_tiled = [q.repeat(batch_size, 1, 1, 1) for q in batch_quantiles]
+    to_cat.extend(batch_quantiles_tiled)
+    
+    #per_sample_quantiles = [torch.quantile(x_flat, q, dim=2, keepdim=True) for q in quantiles]  # shape: (batch, channels, 1)
+    #per_sample_quantiles_tiled = [q.unsqueeze(-1).expand(-1, -1, x.size(2), x.size(3)) for q in per_sample_quantiles]
+    #to_cat += per_sample_quantiles_tiled
+    
+    x_reshaped = x.view(x.size(0), x.size(1), -1)
+    pixel_quantiles = [torch.quantile(x_reshaped, q, dim=2, keepdim=True) for q in quantiles] # (batch, channels, 1)
+    pixel_quantiles_tiled = [q.unsqueeze(-1).repeat(1, 1, height, width) for q in pixel_quantiles]
+    to_cat.extend(pixel_quantiles_tiled)
+    
+    batch_std = torch.std(x, dim=0, keepdim=True) # (1, channels, width, height)
+    batch_std_tiled = batch_std.repeat(batch_size, 1, 1, 1)
+    to_cat.append(batch_std_tiled)
+    
+    #per_sample_std = torch.std(x, dim=(2, 3), keepdim=True)
+    #per_sample_std_tiled = per_sample_std.repeat(1, 1, height, width)
+    #to_cat.append(per_sample_std_tiled)
+
+    pixel_std = torch.std(x_reshaped, dim=2, keepdim=True) # (batch, channels, 1)
+    pixel_std = pixel_std.unsqueeze(-1)
+    pixel_std_tiled = pixel_std.repeat(1, 1, height, width)
+    to_cat.append(pixel_std_tiled)
+        
+    max_rgb, _ = x.max(dim=1, keepdim=True)
+    min_rgb, _ = x.min(dim=1, keepdim=True)
+    delta = max_rgb - min_rgb
+    v = max_rgb
+    s = delta / (max_rgb + 1e-7)  # Add a small constant to avoid division by zero
+    
+    brightness_threshold_white = 0.9
+    brightness_threshold_black = 0.9
+    saturation_threshold_white = 0.1  # Low saturation to consider color close to grayscale for white
+    saturation_threshold_black = 0.1  # Low saturation to consider color close to grayscale for black
+    w = torch.where((v >= brightness_threshold_white) & (s <= saturation_threshold_white), torch.ones_like(v), torch.zeros_like(v))
+    b = torch.where((v <= brightness_threshold_black) & (s <= saturation_threshold_black), -torch.ones_like(v), torch.zeros_like(v))
+    wb = w + b
+    #to_cat.append(w)
+    #to_cat.append(wb) # These help the discriminator SO MUCH.
+                
+    batch_wb_mean = torch.mean(wb, dim=0, keepdim=True) # (1, channels, height, width)
+    batch_wb_mean_tiled = batch_wb_mean.repeat(args.batch_size, 1, 1, 1)
+    #to_cat.append(batch_wb_mean_tiled)
+    
+    to_cat = [stat.to(args.device) for stat in to_cat]
+    statistics = torch.cat(to_cat, dim = 1)
+    return(statistics)
 
 
 
@@ -52,72 +114,6 @@ def create_interpolated_tensor(args):
 
 
 
-# Collecting statistics from batch.
-# Some of these statistics are way too helpful for the discriminator.
-quantiles = [0.05, .15, .25, .5, .75, .85, 0.95]
-
-def get_stats(x, args):
-    batch_size, num_channels, height, width = x.size()
-    x_flat = x.view(x.size(0), x.size(1), -1)  # (batch, channels, height * width)
-    to_cat = []
-
-    batch_quantiles = [torch.quantile(x, q, dim=0, keepdim=True) for q in quantiles] # (1, channels, width, height)
-    batch_quantiles_tiled = [q.repeat(batch_size, 1, 1, 1) for q in batch_quantiles]
-    to_cat.extend(batch_quantiles_tiled)
-    
-    per_sample_quantiles = [torch.quantile(x_flat, q, dim=2, keepdim=True) for q in quantiles]  # shape: (batch, channels, 1)
-    per_sample_quantiles_tiled = [q.unsqueeze(-1).expand(-1, -1, x.size(2), x.size(3)) for q in per_sample_quantiles]
-    to_cat += per_sample_quantiles_tiled
-    
-    x_reshaped = x.view(x.size(0), x.size(1), -1)
-    pixel_quantiles = [torch.quantile(x_reshaped, q, dim=2, keepdim=True) for q in quantiles] # (batch, channels, 1)
-    pixel_quantiles_tiled = [q.unsqueeze(-1).repeat(1, 1, height, width) for q in pixel_quantiles]
-    to_cat.extend(pixel_quantiles_tiled)
-    
-    batch_std = torch.std(x, dim=0, keepdim=True) # (1, channels, width, height)
-    batch_std_tiled = batch_std.repeat(batch_size, 1, 1, 1)
-    to_cat.append(batch_std_tiled)
-    
-    per_sample_std = torch.std(x, dim=(2, 3), keepdim=True)
-    per_sample_std_tiled = per_sample_std.repeat(1, 1, height, width)
-    to_cat.append(per_sample_std_tiled)
-
-    pixel_std = torch.std(x_reshaped, dim=2, keepdim=True) # (batch, channels, 1)
-    pixel_std = pixel_std.unsqueeze(-1)
-    pixel_std_tiled = pixel_std.repeat(1, 1, height, width)
-    to_cat.append(pixel_std_tiled)
-        
-    max_rgb, _ = x.max(dim=1, keepdim=True)
-    min_rgb, _ = x.min(dim=1, keepdim=True)
-    delta = max_rgb - min_rgb
-    v = max_rgb
-    s = delta / (max_rgb + 1e-7)  # Add a small constant to avoid division by zero
-    
-    brightness_threshold_white = 0.9
-    brightness_threshold_black = 0.9
-    saturation_threshold_white = 0.1  # Low saturation to consider color close to grayscale for white
-    saturation_threshold_black = 0.1  # Low saturation to consider color close to grayscale for black
-    w = torch.where((v >= brightness_threshold_white) & (s <= saturation_threshold_white), torch.ones_like(v), torch.zeros_like(v))
-    b = torch.where((v <= brightness_threshold_black) & (s <= saturation_threshold_black), -torch.ones_like(v), torch.zeros_like(v))
-    wb = w + b
-    #to_cat.append(wb) # These help the discriminator SO MUCH.
-                
-    batch_wb_mean = torch.mean(wb, dim=0, keepdim=True) # (1, channels, height, width)
-    batch_wb_mean_tiled = batch_wb_mean.repeat(args.batch_size, 1, 1, 1)
-    to_cat.append(batch_wb_mean_tiled)
-            
-    to_cat = [stat.to(args.device) for stat in to_cat]
-    statistics = torch.cat(to_cat, dim = 1)
-    return(statistics)
-
-
-
-
-
-
-
-
-
 # Pixel shuffling.
 def space_to_depth(x, r):
     B, C, H, W = x.shape
@@ -135,6 +131,15 @@ class SpaceToDepth(nn.Module):
     def forward(self, x):
         x = space_to_depth(x, 2)
         return x
+    
+    
+
+# Add position layers.
+def add_position_layers(x, learned_pos, scale = 1):
+    pos = learned_pos.repeat(x.shape[0], 1, 1, 1)
+    pos = F.interpolate(pos, scale_factor = scale, mode = "bilinear", align_corners = True)
+    x = torch.cat([x, pos], dim = 1)
+    return(x)
 
 
 
@@ -153,15 +158,13 @@ class Multi_Kernel_CNN(nn.Module):
             self, 
             in_channels, 
             out_channels, 
-            kernel_sizes = [(1,1),(3,3),(5,5)], 
+            kernel_sizes = [1, 3, 5], 
             stride = 1):
         super(Multi_Kernel_CNN, self).__init__()
         
         self.Conv2ds = nn.ModuleList()
         for kernel, out_channel in zip(kernel_sizes, out_channels):
-            if(type(kernel) == int): 
-                kernel = (kernel, kernel)
-            padding = ((kernel[0]-1)//2, (kernel[1]-1)//2)
+            padding = ((kernel-1)//2, (kernel-1)//2)
             layer = nn.Sequential(
                 ConstrainedConv2d(
                     in_channels = in_channels,
@@ -176,6 +179,8 @@ class Multi_Kernel_CNN(nn.Module):
         y = []
         for Conv2d in self.Conv2ds: y.append(Conv2d(x)) 
         return(torch.cat(y, dim = -3))
+
+    
 
 
 
@@ -218,35 +223,31 @@ class SelfAttention(nn.Module):
     
     
 # My personal kind of layer. Allows growing, shrinking, and attention.
-class CNN_Attention_Blend(nn.Module):
+class My_Layer(nn.Module):
     def __init__(self, 
                  in_channels = 32, 
                  channels = 32, 
                  kernel_size = 3, 
-                 grow = False,
-                 shrink = False,
+                 grow_or_shrink = "none", 
                  paying_attention = False, 
                  attention_kernel_size = 1, 
                  activations = True, 
                  args = default_args):
-        super(CNN_Attention_Blend, self).__init__()
+        super(My_Layer, self).__init__()
         
-        # This is my kludgey way to make inputs into self-values.
-        self.__dict__.update({k: v for k, v in locals().items() if k != 'self'})
-        
-        # This is my kludgey way to get the number of channels layers should have.
-        example = torch.zeros(self.args.batch_size, in_channels, self.args.image_size, self.args.image_size)
-        print("CAB START:", example.shape)
+        self.args = args
+        self.grow_or_shrink = grow_or_shrink
+        self.paying_attention = paying_attention
         
         mid_channels = channels
-        if(self.shrink and self.paying_attention):
+        if(grow_or_shrink == "shrink" and paying_attention):
             mid_channels = in_channels
-        if(self.grow or (not self.grow and not self.shrink)):
+        if(grow_or_shrink in ["none", "grow"]):
             mid_channels = in_channels
         
         padding_size = ((kernel_size-1)//2, (kernel_size-1)//2)
         
-        if(self.grow or (not self.grow and not self.shrink)):
+        if(grow_or_shrink in ["none", "grow"]):
             self.x_in = nn.Sequential(
                 nn.Conv2d(
                     in_channels = in_channels, 
@@ -257,7 +258,7 @@ class CNN_Attention_Blend(nn.Module):
                 nn.BatchNorm2d(mid_channels),
                 nn.LeakyReLU())
             
-        if(self.shrink):
+        if(grow_or_shrink == "shrink"):
             self.x_in = nn.Sequential(
                 nn.Conv2d(
                     in_channels = in_channels, 
@@ -265,36 +266,31 @@ class CNN_Attention_Blend(nn.Module):
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"),
+                #nn.AvgPool2d(kernel_size = 2, stride = 2),
                 SpaceToDepth(block_size=2),  
                 nn.BatchNorm2d(mid_channels * 4),
                 nn.LeakyReLU())
-            
-        example = self.x_in(example)
-        print("CAB x_in:", example.shape)
         
         
         
         if(paying_attention):
             self.attention = nn.Sequential(
                 SelfAttention(
-                    in_channels * (4 if self.shrink else 1),
+                    in_channels * (4 if grow_or_shrink == "shrink" else 1),
                     attention_kernel_size))
             
-            example = self.attention(example)
-            print("CAB attention:", example.shape)
             
             
-            
-        if(self.shrink or (not self.grow and not self.shrink)):
+        if(grow_or_shrink in ["none", "shrink"]):
             self.x_out = nn.Sequential(
                 nn.Conv2d(
-                    in_channels = mid_channels * (4 if self.shrink else 1), 
+                    in_channels = mid_channels * (4 if grow_or_shrink == "shrink" else 1), 
                     out_channels = channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"))
             
-        if(self.grow):
+        if(grow_or_shrink == "grow"):
             self.x_out = nn.Sequential(
                 nn.Conv2d(
                     in_channels = mid_channels,
@@ -307,9 +303,6 @@ class CNN_Attention_Blend(nn.Module):
                     mode = "bilinear",
                     align_corners = True))
             
-        example = self.x_out(example)
-        print("CAB x_out:", example.shape)
-            
         if(activations):
             self.activations = nn.Sequential(
                 nn.BatchNorm2d(channels),
@@ -320,7 +313,8 @@ class CNN_Attention_Blend(nn.Module):
     def forward(self, x):
         x_2 = self.x_in(x)
         if(self.paying_attention):
-            if(self.shrink):
+            if(self.grow_or_shrink == "shrink"):
+                #x = F.avg_pool2d(input = x, kernel_size = 2, stride = 2)
                 x = space_to_depth(x, 2)
             attention = self.attention(x)
             x_2 = x_2 + attention

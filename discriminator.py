@@ -15,7 +15,7 @@ from io import BytesIO
 from PIL import Image
 
 from utils import get_random_batch, default_args
-from utils_for_torch import init_weights, var, sample, get_stats, CNN_Attention_Blend
+from utils_for_torch import init_weights, var, sample, My_Layer, get_stats, add_position_layers
 
 
 
@@ -28,6 +28,12 @@ class Discriminator(nn.Module):
         
         # This is my kludgey way to get the number of channels layers should have.
         example = torch.zeros(self.args.batch_size, 3, self.args.image_size, self.args.image_size)
+        
+        channels_for_pos = 3
+        self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
+        pos_64 = self.learned_pos_64.repeat(example.shape[0], 1, 1, 1)
+        pos_64 = F.interpolate(pos_64, scale_factor = 4, mode = "bilinear", align_corners = True)
+        example = torch.cat([example, pos_64], dim = 1)
         
         stats = get_stats(example, self.args).cpu()
         stat_channels = stats.shape[1]
@@ -48,7 +54,7 @@ class Discriminator(nn.Module):
         # Process images.
         self.images = nn.Sequential(
             nn.Conv2d(
-                in_channels = 3, 
+                in_channels = 3 + channels_for_pos, 
                 out_channels = 32,
                 kernel_size = 7,
                 padding = 3,
@@ -63,28 +69,31 @@ class Discriminator(nn.Module):
         self.a = nn.Sequential(
             # 64 by 64
             nn.Dropout2d(p=self.args.dropout),
-            CNN_Attention_Blend(
+            My_Layer(
                 in_channels = 64, 
                 channels = 32, 
                 kernel_size = 7, 
-                grow = False,
-                shrink = True,
+                grow_or_shrink = "shrink", 
                 paying_attention = False, 
                 attention_kernel_size = 5,
                 args = default_args),
             nn.Dropout2d(p=self.args.dropout))
         
         example = self.a(example)
+        channels_for_pos = 3
+        self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
+        pos_32 = self.learned_pos_32.repeat(example.shape[0], 1, 1, 1)
+        pos_32 = F.interpolate(pos_32, scale_factor = 2, mode = "bilinear", align_corners = True)
+        example = torch.cat([example, pos_32], dim = 1)
         
         self.b = nn.Sequential(
             # 32 by 32
             nn.Dropout2d(p=self.args.dropout),
-            CNN_Attention_Blend(
-                in_channels = 32, 
+            My_Layer(
+                in_channels = 32 + channels_for_pos, 
                 channels = 32, 
                 kernel_size = 7, 
-                grow = False,
-                shrink = True,
+                grow_or_shrink = "shrink", 
                 paying_attention = True, 
                 attention_kernel_size = 3,
                 args = default_args),
@@ -92,25 +101,28 @@ class Discriminator(nn.Module):
             # 16 by 16
             
         example = self.b(example)
+        channels_for_pos = 3
+        self.learned_pos_16 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
+        pos_16 = self.learned_pos_16.repeat(example.shape[0], 1, 1, 1)
+        pos_16 = F.interpolate(pos_16, scale_factor = 2, mode = "bilinear", align_corners = True)
+        example = torch.cat([example, pos_16], dim = 1)
             
         self.c = nn.Sequential(
-            CNN_Attention_Blend(
-                in_channels = 32, 
+            My_Layer(
+                in_channels = 32 + channels_for_pos, 
                 channels = 32, 
                 kernel_size = 5, 
-                grow = False,
-                shrink = True,
+                grow_or_shrink = "shrink", 
                 paying_attention = True, 
                 attention_kernel_size = 3,
                 args = default_args),
             # 8 by 8
             nn.Dropout2d(p=self.args.dropout),
-            CNN_Attention_Blend(
+            My_Layer(
                 in_channels = 32, 
                 channels = 32, 
                 kernel_size = 3, 
-                grow = False,
-                shrink = True,
+                grow_or_shrink = "shrink", 
                 paying_attention = False, 
                 attention_kernel_size = 1,
                 args = default_args))
@@ -141,6 +153,11 @@ class Discriminator(nn.Module):
     def forward(self, images):
         batch_size, num_channels, height, width = images.size()
         images = (images * 2) - 1
+        
+        # Add position layers.
+        pos_64 = self.learned_pos_64.repeat(images.shape[0], 1, 1, 1)
+        pos_64 = F.interpolate(pos_64, scale_factor = 4, mode = "bilinear", align_corners = True)
+        images = torch.cat([images, pos_64], dim = 1)
                         
         # Process statistics and images.
         stats = get_stats(images, self.args)
@@ -150,7 +167,17 @@ class Discriminator(nn.Module):
     
         # Shrinking and flattening.
         a = self.a(images)
+        
+        # Add position layers.
+        pos_32 = self.learned_pos_32.repeat(a.shape[0], 1, 1, 1)
+        pos_32 = F.interpolate(pos_32, scale_factor = 2, mode = "bilinear", align_corners = True)
+        a = torch.cat([a, pos_32], dim = 1)
         b = self.b(a)
+        
+        # Add position layers.
+        pos_16 = self.learned_pos_16.repeat(a.shape[0], 1, 1, 1)
+        pos_16 = F.interpolate(pos_16, scale_factor = 2, mode = "bilinear", align_corners = True)
+        b = torch.cat([b, pos_16], dim = 1)
         c = self.c(b)
         
         # Flatten.
@@ -158,7 +185,7 @@ class Discriminator(nn.Module):
         
         # Apply mean and standard deviation.
         mu, std = var(d, self.mu, self.std, self.args)
-        sampled = sample(mu, std)
+        sampled = sample(mu, std, self.args.device)
         sampled = torch.tanh(sampled)
         
         # Finish.
@@ -178,8 +205,7 @@ if(__name__ == "__main__"):
         with record_function("model_inference"):
             print(summary(dis, (args.batch_size, 3, args.image_size, args.image_size)))
     #print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
-    
-    
+        
     
 
     

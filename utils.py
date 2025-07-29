@@ -97,6 +97,10 @@ parser.add_argument("--min_real",                       type=float,     default 
                     help='Real images are typically labeled as 1, but it can help to reduce that.') 
 parser.add_argument("--max_real",                       type=float,     default = .9,
                     help='Real images are typically labeled as 1, but it can help to reduce that.')  
+parser.add_argument("--stat_quantiles",                 type=list,     default = [0.05, .5, 0.95],
+                    help='Quantiles for the get_stats function.')  
+parser.add_argument("--use_hsv",                        type=bool,     default = False,
+                    help='Should the discriminator use the HSV?')  
 
     # Awesome options
 parser.add_argument('--extrinsic',                      type=float,     default = 5,
@@ -400,6 +404,38 @@ def plot_positional_layers_gen(gan):
     
         plt.tight_layout()
         pos_path = file_location + f'/generated_images/{gan.args.arg_name}/epoch_{str(gan.epochs).zfill(5)}/learned_positional_layers_gen.png'
+        os.makedirs(os.path.dirname(pos_path), exist_ok=True)
+        plt.savefig(pos_path)
+        plt.close()
+        
+def plot_positional_layers_dis(gan):
+    with torch.no_grad():
+        pos_layers = [
+            ("learned_pos_64", gan.dis_list[0].learned_pos_64),
+            ("learned_pos_32", gan.dis_list[0].learned_pos_32),
+            ("learned_pos_16", gan.dis_list[0].learned_pos_16)
+        ]
+        rows = len(pos_layers)
+        columns_needed = [tensor.shape[1] for name, tensor in pos_layers]
+        columns = max(columns_needed)
+        fig, axs = plt.subplots(rows, columns, figsize=(1 * columns, 1 * rows))
+    
+        for row_idx in range(rows):
+            name, tensor = pos_layers[row_idx]
+            pos = tensor.squeeze(0).cpu()  # Shape: (C, H, W)
+            for channel_idx in range(columns):
+                if(channel_idx < pos.shape[0]):
+                    ax = axs[row_idx, channel_idx] if tensor.shape[1] > 1 else axs[row_idx]
+                    ax.imshow(pos[channel_idx], cmap='gray', vmin=-1, vmax=1)
+                    ax.axis("off")
+                    for spine in ax.spines.values():
+                        spine.set_edgecolor("black")
+                        spine.set_linewidth(2)
+                else:
+                    ax.set_visible(False)
+    
+        plt.tight_layout()
+        pos_path = file_location + f'/generated_images/{gan.args.arg_name}/epoch_{str(gan.epochs).zfill(5)}/learned_positional_layers_dis.png'
         os.makedirs(os.path.dirname(pos_path), exist_ok=True)
         plt.savefig(pos_path)
         plt.close()
