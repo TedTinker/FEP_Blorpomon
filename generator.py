@@ -12,7 +12,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import torch.nn.functional as F
 
 from utils import default_args
-from utils_for_torch import init_weights, var, sample, My_Layer, add_position_layers
+from utils_for_torch import init_weights, var, sample, CNN_Attention_Blend, add_position_layers
 
 
 
@@ -22,6 +22,10 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         
         self.args = args
+        
+        # This is my kludgey way to see qualities that layers should have.
+        example = torch.zeros(self.args.batch_size, self.args.seed_size)
+        print("\nStart of Generator:", example.shape)
                      
         # From seeds to tensor for CNN.
         self.process_seeds = nn.Sequential(
@@ -29,91 +33,120 @@ class Generator(nn.Module):
                 in_features = self.args.seed_size, 
                 out_features =  32 * 4 * 4))
         
+        example = self.process_seeds(example).view(-1, 32, 4, 4)
+        print("Gen processed seeds:", example.shape)
+        
         # CNNs growing image size.
         self.a = nn.Sequential(
             # 4 by 4
-            My_Layer(
-                in_channels = 32, 
+            CNN_Attention_Blend(
+                in_channels = example.shape[1], 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "grow", 
+                grow = True,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 1,
                 args = default_args),
             # 8 by 8           
             )
         
+        example = self.a(example)
+        print("Gen a:", example.shape)
+        
         # Mean and standard deviation.
         self.mu = nn.Sequential(
-            My_Layer(
-                in_channels = 32, 
+            CNN_Attention_Blend(
+                in_channels = example.shape[1], 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "none", 
+                grow = False,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 3,
                 activations = False, 
                 args = default_args))
         
         self.std = nn.Sequential(
-            My_Layer(
-                in_channels = 32, 
+            CNN_Attention_Blend(
+                in_channels = example.shape[1], 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "none", 
+                grow = False,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 3,
                 activations = False, 
                 args = default_args),
             nn.Softplus())
+        
+        example_mu, example_std = var(example, self.mu, self.std, self.args)
+        example = sample(example_mu, example_std)
+        print("Gen mu and std:", example.shape)
             
         # CNNs growing image. 
         self.b = nn.Sequential(
-            My_Layer(
-                in_channels = 32, 
+            CNN_Attention_Blend(
+                in_channels = example.shape[1], 
                 channels = 32, 
                 kernel_size = 3, 
-                grow_or_shrink = "grow", 
+                grow = True,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 3,
                 args = default_args))
             # 16 by 16
             
+        example = self.b(example)
         channels_for_pos = 3
         self.learned_pos_16 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
+        example = add_position_layers(example, self.learned_pos_16, scale = 2)
+        print("Gen b:", example.shape)
+        
         self.c = nn.Sequential(
-            My_Layer(
-                in_channels = 32 + channels_for_pos, 
+            CNN_Attention_Blend(
+                in_channels = example.shape[1], 
                 channels = 32, 
                 kernel_size = 5, 
-                grow_or_shrink = "grow", 
+                grow = True,
+                shrink = False,
                 paying_attention = True, 
                 attention_kernel_size = 5,
                 args = default_args))
             # 32 by 32
             
+        example = self.c(example)
         channels_for_pos = 3
         self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
+        example = add_position_layers(example, self.learned_pos_32, scale = 2)
+        print("Gen c:", example.shape)
+        
         self.d = nn.Sequential(
-            My_Layer(
-                in_channels = 32 + channels_for_pos, 
+            CNN_Attention_Blend(
+                in_channels = example.shape[1], 
                 channels = 32, 
                 kernel_size = 7, 
-                grow_or_shrink = "grow", 
+                grow = True,
+                shrink = False, 
                 paying_attention = True, 
                 attention_kernel_size = 5,
                 args = default_args))
             # 64 by 64     
 
-        # CNNs growing image and finishing image. 
+        example = self.d(example)
         channels_for_pos = 3
         self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
+        example = add_position_layers(example, self.learned_pos_64, scale = 4)
+        print("Gen d:", example.shape)
+        
+        # CNNs growing image and finishing image.         
         self.finish = nn.Sequential(
-            My_Layer(
-                in_channels = 32 + channels_for_pos, 
+            CNN_Attention_Blend(
+                in_channels = example.shape[1], 
                 channels = 32, 
                 kernel_size = 7, 
-                grow_or_shrink = "none", 
+                grow = False,
+                shrink = False,
                 paying_attention = False, 
                 attention_kernel_size = 5,
                 args = default_args),
@@ -125,6 +158,9 @@ class Generator(nn.Module):
                 padding = 0,
                 padding_mode = "reflect"),
             nn.Tanh())
+        
+        example = self.finish(example)
+        print("Finished Generator:", example.shape, "\n")
         
         
         self.apply(init_weights)
@@ -144,9 +180,9 @@ class Generator(nn.Module):
         # Apply mean and standard deviation.
         mu, std = var(a, self.mu, self.std, self.args)
         if(use_std): 
-            sampled = sample(mu, std, self.args.device)
+            sampled = sample(mu, std)
         else:
-            sampled = sample(mu, 0 * std, self.args.device)
+            sampled = sample(mu, 0 * std)
         
         # Grow.
         b = self.b(sampled)
@@ -178,5 +214,5 @@ if(__name__ == "__main__"):
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
         with record_function("model_inference"):
             print(summary(gen, (args.batch_size, default_args.seed_size)))
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
+    #print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
 # %%

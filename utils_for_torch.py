@@ -24,8 +24,8 @@ def var(x, mu_func, std_func, args):
     return(mu, std)
 
 # How to sample from probability distributions.
-def sample(mu, std, device):
-    e = Normal(0, 1).sample(std.shape).to(device)
+def sample(mu, std):
+    e = Normal(0, 1).sample(std.shape).to(std.device)
     return(mu + e * std)
 
 
@@ -182,8 +182,6 @@ class Multi_Kernel_CNN(nn.Module):
 
     
 
-
-
 # Attention layers.
 class SelfAttention(nn.Module):
     def __init__(self, in_channels, kernel_size = 1):
@@ -223,34 +221,38 @@ class SelfAttention(nn.Module):
     
     
 # My personal kind of layer. Allows growing, shrinking, and attention.
-class My_Layer(nn.Module):
+class CNN_Attention_Blend(nn.Module):
     def __init__(self, 
                  in_channels = 32, 
                  channels = 32, 
                  kernel_size = 3, 
-                 grow_or_shrink = "none", 
+                 grow = False,
+                 shrink = False, 
                  paying_attention = False, 
                  attention_kernel_size = 1, 
                  activations = True, 
                  args = default_args):
-        super(My_Layer, self).__init__()
+        super(CNN_Attention_Blend, self).__init__()
         
-        self.args = args
-        self.grow_or_shrink = grow_or_shrink
-        self.paying_attention = paying_attention
+        # This is my kludgey way to make inputs into self-values.
+        self.__dict__.update({k: v for k, v in locals().items() if k != 'self'})
+        
+        # This is my kludgey way to see qualities that layers should have.
+        example = torch.zeros(self.args.batch_size, in_channels, 8, 8)
+        print("Start of CAB:", example.shape)
         
         mid_channels = channels
-        if(grow_or_shrink == "shrink" and paying_attention):
+        if(self.shrink and paying_attention):
             mid_channels = in_channels
-        if(grow_or_shrink in ["none", "grow"]):
+        if(self.grow or (not self.grow and not self.shrink)):
             mid_channels = in_channels
         
         padding_size = ((kernel_size-1)//2, (kernel_size-1)//2)
         
-        if(grow_or_shrink in ["none", "grow"]):
+        if(self.grow or (not self.grow and not self.shrink)):
             self.x_in = nn.Sequential(
                 nn.Conv2d(
-                    in_channels = in_channels, 
+                    in_channels = example.shape[1], 
                     out_channels = mid_channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
@@ -258,10 +260,13 @@ class My_Layer(nn.Module):
                 nn.BatchNorm2d(mid_channels),
                 nn.LeakyReLU())
             
-        if(grow_or_shrink == "shrink"):
+            example = self.x_in(example)
+            print("CAB in:", example.shape)
+            
+        if(self.shrink):
             self.x_in = nn.Sequential(
                 nn.Conv2d(
-                    in_channels = in_channels, 
+                    in_channels = example.shape[1], 
                     out_channels = mid_channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
@@ -270,30 +275,39 @@ class My_Layer(nn.Module):
                 SpaceToDepth(block_size=2),  
                 nn.BatchNorm2d(mid_channels * 4),
                 nn.LeakyReLU())
+            
+            example = self.x_in(example)
+            print("CAB in (shrink):", example.shape)
         
         
         
         if(paying_attention):
             self.attention = nn.Sequential(
                 SelfAttention(
-                    in_channels * (4 if grow_or_shrink == "shrink" else 1),
+                    example.shape[1],
                     attention_kernel_size))
             
+            example = self.attention(example)
+            print("CAB attention:", example.shape)
             
             
-        if(grow_or_shrink in ["none", "shrink"]):
+            
+        if(self.shrink or (not self.grow and not self.shrink)):
             self.x_out = nn.Sequential(
                 nn.Conv2d(
-                    in_channels = mid_channels * (4 if grow_or_shrink == "shrink" else 1), 
+                    in_channels = example.shape[1], 
                     out_channels = channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"))
+
+            example = self.x_out(example)
+            print("CAB out:", example.shape)
             
-        if(grow_or_shrink == "grow"):
+        if(self.grow):
             self.x_out = nn.Sequential(
                 nn.Conv2d(
-                    in_channels = mid_channels,
+                    in_channels = example.shape[1],
                     out_channels = channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
@@ -302,6 +316,9 @@ class My_Layer(nn.Module):
                     scale_factor = 2,
                     mode = "bilinear",
                     align_corners = True))
+            
+            example = self.x_out(example)
+            print("CAB out (grow):", example.shape)
             
         if(activations):
             self.activations = nn.Sequential(
@@ -313,7 +330,7 @@ class My_Layer(nn.Module):
     def forward(self, x):
         x_2 = self.x_in(x)
         if(self.paying_attention):
-            if(self.grow_or_shrink == "shrink"):
+            if(self.shrink):
                 #x = F.avg_pool2d(input = x, kernel_size = 2, stride = 2)
                 x = space_to_depth(x, 2)
             attention = self.attention(x)
