@@ -15,7 +15,7 @@ from io import BytesIO
 from PIL import Image
 
 from utils import get_random_batch, default_args
-from utils_for_torch import init_weights, var, sample, CNN_Attention_Blend, get_stats, add_position_layers, ConstrainedConv2d
+from utils_for_torch import init_weights, var, sample, Multi_Kernel_CAB, get_stats, add_position_layers, ConstrainedConv2d
 
 
 
@@ -67,10 +67,10 @@ class Discriminator(nn.Module):
         self.a = nn.Sequential(
             # 64 by 64
             nn.Dropout2d(p=self.args.dropout),
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 7, 
+                out_channels = [32], 
+                kernel_sizes = [7], 
                 grow = False,
                 shrink = True, 
                 paying_attention = False, 
@@ -88,14 +88,14 @@ class Discriminator(nn.Module):
         self.b = nn.Sequential(
             # 32 by 32
             nn.Dropout2d(p=self.args.dropout),
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 7, 
+                out_channels = [32], 
+                kernel_sizes = [7], 
                 grow = False,
                 shrink = True, 
                 paying_attention = True, 
-                attention_kernel_size = 7,
+                attention_kernel_sizes = [7],
                 args = default_args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
@@ -109,23 +109,23 @@ class Discriminator(nn.Module):
         print("Dis b:", example.shape)
         
         self.c = nn.Sequential(
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 5, 
+                out_channels = [32], 
+                kernel_sizes = [5], 
                 grow = False,
                 shrink = True, 
                 paying_attention = True, 
-                attention_kernel_size = 5,
+                attention_kernel_sizes = [5],
                 args = default_args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             # 8 by 8
             nn.Dropout2d(p=self.args.dropout),
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = (example.shape[0], 32, example.shape[2], example.shape[3]), 
-                out_channels = 32, 
-                kernel_size = 3, 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = False,
                 shrink = True, 
                 paying_attention = False, 

@@ -12,7 +12,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import torch.nn.functional as F
 
 from utils import default_args
-from utils_for_torch import init_weights, var, sample, CNN_Attention_Blend, add_position_layers
+from utils_for_torch import init_weights, var, sample, Multi_Kernel_CAB, add_position_layers
 
 
 
@@ -39,10 +39,10 @@ class Generator(nn.Module):
         # CNNs growing image size.
         self.a = nn.Sequential(
             # 4 by 4
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 3, 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = True,
                 shrink = False,
                 paying_attention = False, 
@@ -57,25 +57,23 @@ class Generator(nn.Module):
         
         # Mean and standard deviation.
         self.mu = nn.Sequential(
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 3, 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
-                attention_kernel_size = 3,
                 args = default_args))
         
         self.std = nn.Sequential(
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 3, 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
-                attention_kernel_size = 3,
                 args = default_args),
             nn.Softplus())
         
@@ -85,10 +83,10 @@ class Generator(nn.Module):
             
         # CNNs growing image. 
         self.b = nn.Sequential(
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 3, 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = True,
                 shrink = False,
                 paying_attention = False, 
@@ -104,14 +102,14 @@ class Generator(nn.Module):
         print("Gen b:", example.shape)
         
         self.c = nn.Sequential(
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 5, 
+                out_channels = [32], 
+                kernel_sizes = [5], 
                 grow = True,
                 shrink = False,
                 paying_attention = True, 
-                attention_kernel_size = 5,
+                attention_kernel_sizes = [5],
                 args = default_args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
@@ -124,14 +122,14 @@ class Generator(nn.Module):
         print("Gen c:", example.shape)
         
         self.d = nn.Sequential(
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 7, 
+                out_channels = [32], 
+                kernel_sizes = [7], 
                 grow = True,
                 shrink = False, 
                 paying_attention = True, 
-                attention_kernel_size = 7,
+                attention_kernel_sizes = [7],
                 args = default_args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
@@ -145,10 +143,10 @@ class Generator(nn.Module):
         
         # CNNs growing image and finishing image.         
         self.finish = nn.Sequential(
-            CNN_Attention_Blend(
+            Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = 32, 
-                kernel_size = 7, 
+                out_channels = [32], 
+                kernel_sizes = [7], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
