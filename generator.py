@@ -59,8 +59,8 @@ class Generator(nn.Module):
         self.mu = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [3], 
+                out_channels = [8, 24], 
+                kernel_sizes = [1, 3], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
@@ -69,8 +69,8 @@ class Generator(nn.Module):
         self.std = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [3], 
+                out_channels = [8, 24], 
+                kernel_sizes = [1, 3], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
@@ -85,8 +85,8 @@ class Generator(nn.Module):
         self.b = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [3], 
+                out_channels = [8, 24], 
+                kernel_sizes = [1, 3], 
                 grow = True,
                 shrink = False,
                 paying_attention = False, 
@@ -104,12 +104,12 @@ class Generator(nn.Module):
         self.c = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [8, 24], 
-                kernel_sizes = [3, 5], 
+                out_channels = [8, 16, 8], 
+                kernel_sizes = [1, 3, 5], 
                 grow = True,
                 shrink = False,
                 paying_attention = True, 
-                attention_kernel_sizes = [3, 5],
+                attention_kernel_sizes = [1, 3, 5],
                 args = default_args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
@@ -125,11 +125,11 @@ class Generator(nn.Module):
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
                 out_channels = [8, 8, 8, 8], 
-                kernel_sizes = [3, 5, 7, 9], 
+                kernel_sizes = [1, 3, 5, 7], 
                 grow = True,
                 shrink = False, 
                 paying_attention = True, 
-                attention_kernel_sizes = [3, 5, 7, 9],
+                attention_kernel_sizes = [1, 3, 5, 7],
                 args = default_args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
@@ -146,7 +146,7 @@ class Generator(nn.Module):
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
                 out_channels = [8, 8, 8, 8], 
-                kernel_sizes = [3, 5, 7, 9], 
+                kernel_sizes = [1, 3, 5, 7], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 

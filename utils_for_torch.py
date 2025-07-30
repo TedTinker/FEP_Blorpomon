@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from torch.distributions import Normal
 import torch.nn.functional as F
+from kornia.color import rgb_to_hsv 
 
 from utils import default_args
 
@@ -30,8 +31,20 @@ def sample(mu, std):
 
 
 
+def sobel_edges(x):
+    sobel_x = torch.tensor([[1, 0, -1],
+                            [2, 0, -2],
+                            [1, 0, -1]], dtype=torch.float32, device=x.device).view(1, 1, 3, 3)
+    sobel_y = sobel_x.transpose(2, 3)    
+    edge_x = F.conv2d(x, sobel_x, padding=1, groups=1)
+    edge_y = F.conv2d(x, sobel_y, padding=1, groups=1)
+    edge_magnitude = torch.sqrt(edge_x ** 2 + edge_y ** 2)
+    return edge_magnitude
+
+
+
 # Collecting statistics from batch.
-def get_stats(x, args):
+def get_stats(x, hsv, args):
     quantiles = args.stat_quantiles
     batch_size, num_channels, height, width = x.size()
     x_flat = x.view(x.size(0), x.size(1), -1)  # (batch, channels, height * width)
@@ -69,22 +82,37 @@ def get_stats(x, args):
     v = max_rgb
     s = delta / (max_rgb + 1e-7)  # Add a small constant to avoid division by zero
     
-    brightness_threshold_white = 0.9
-    brightness_threshold_black = 0.9
-    saturation_threshold_white = 0.1  # Low saturation to consider color close to grayscale for white
-    saturation_threshold_black = 0.1  # Low saturation to consider color close to grayscale for black
-    w = torch.where((v >= brightness_threshold_white) & (s <= saturation_threshold_white), torch.ones_like(v), torch.zeros_like(v))
-    b = torch.where((v <= brightness_threshold_black) & (s <= saturation_threshold_black), -torch.ones_like(v), torch.zeros_like(v))
-    wb = w + b
-    to_cat.append(wb) # These help the discriminator SO MUCH.
-                
-    batch_wb_mean = torch.mean(wb, dim=0, keepdim=True) # (1, channels, height, width)
-    batch_wb_mean_tiled = batch_wb_mean.repeat(args.batch_size, 1, 1, 1)
-    to_cat.append(batch_wb_mean_tiled)
+    if(not hsv):
+        brightness_threshold_white = 0.9
+        brightness_threshold_black = 0.9
+        saturation_threshold_white = 0.1  # Low saturation to consider color close to grayscale for white
+        saturation_threshold_black = 0.1  # Low saturation to consider color close to grayscale for black
+        w = torch.where((v >= brightness_threshold_white) & (s <= saturation_threshold_white), torch.ones_like(v), torch.zeros_like(v))
+        b = torch.where((v <= brightness_threshold_black) & (s <= saturation_threshold_black), -torch.ones_like(v), torch.zeros_like(v))
+        wb = w + b
+        to_cat.append(wb) # These help the discriminator SO MUCH.
+                    
+        batch_wb_mean = torch.mean(wb, dim=0, keepdim=True) # (1, channels, height, width)
+        batch_wb_mean_tiled = batch_wb_mean.repeat(args.batch_size, 1, 1, 1)
+        to_cat.append(batch_wb_mean_tiled)
+    
+    #sobel = sobel_edges(x)
+    #to_cat.append(sobel)
     
     to_cat = [stat.to(args.device) for stat in to_cat]
     statistics = torch.cat(to_cat, dim = 1)
     return(statistics)
+
+
+
+# Convert RGB images to HSV images.
+def rgb_to_circular_hsv(rgb):
+    hsv_image = rgb_to_hsv(rgb) 
+    hue = hsv_image[:, 0, :, :]
+    hue_sin = (torch.sin(hue) + 1) / 2
+    hue_cos = (torch.cos(hue) + 1) / 2
+    hsv_circular = torch.stack([hue_sin, hue_cos, hsv_image[:, 1, :, :], hsv_image[:, 2, :, :]], dim=1)
+    return hsv_circular
 
 
 
@@ -225,7 +253,7 @@ class CNN_Attention_Blend(nn.Module):
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"),
-                nn.BatchNorm2d(mid_channels),
+                nn.InstanceNorm2d(mid_channels, affine = True),
                 nn.LeakyReLU())
             
             example = self.x_in(example)
@@ -241,7 +269,7 @@ class CNN_Attention_Blend(nn.Module):
                     padding_mode = "reflect"),
                 #nn.AvgPool2d(kernel_size = 2, stride = 2),
                 SpaceToDepth(block_size=2),  
-                nn.BatchNorm2d(mid_channels * 4),
+                nn.InstanceNorm2d(mid_channels * 4, affine = True),
                 nn.LeakyReLU())
             
             example = self.x_in(example)

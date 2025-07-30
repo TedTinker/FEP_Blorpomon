@@ -99,7 +99,7 @@ parser.add_argument("--max_real",                       type=float,     default 
                     help='Real images are typically labeled as 1, but it can help to reduce that.')  
 parser.add_argument("--stat_quantiles",                 type=list,     default = [0.05, .5, 0.95],
                     help='Quantiles for the get_stats function.')  
-parser.add_argument("--use_hsv",                        type=bool,     default = False,
+parser.add_argument("--use_hsv",                        type=bool,     default = True,
                     help='Should the discriminator use the HSV?')  
 
     # Awesome options
@@ -444,9 +444,20 @@ def plot_positional_layers_dis(gan):
 
 # Quick example.
 if(__name__ == "__main__"):
-    batch_size = 8
-    batch_tensor = get_random_batch(all_images_tensor, batch_size)
-    print("Batch shape:", batch_tensor.shape)
-    show_images_from_tensor(batch_tensor)
+    print("Shape of all data:", all_images_tensor.shape)
     
+    # Compute the average image
+    avg_image = all_images_tensor.mean(dim=0)  # shape: (C, H, W)
+
+    # Convert to numpy format for plotting
+    avg_image_np = avg_image.permute(1, 2, 0).cpu().numpy()
+    avg_image_np = (avg_image_np - avg_image_np.min()) / (avg_image_np.max() - avg_image_np.min())  # normalize to [0,1]
+
+    # Plot and show the image
+    plt.figure(figsize=(4, 4))
+    plt.imshow(avg_image_np)
+    plt.axis('off')
+    plt.title("Average Image")
+    plt.tight_layout()
+    plt.savefig("average_of_all_images.png")
 # %%
