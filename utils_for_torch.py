@@ -148,37 +148,6 @@ class ConstrainedConv2d(nn.Conv2d):
     def forward(self, input):
         return nn.functional.conv2d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
                                     self.padding, self.dilation, self.groups)
-    
-    
-    
-# Multi-Kernel CNN (MKC).
-class Multi_Kernel_CNN(nn.Module):
-    
-    def __init__(
-            self, 
-            in_channels, 
-            out_channels, 
-            kernel_sizes = [1, 3, 5], 
-            stride = 1):
-        super(Multi_Kernel_CNN, self).__init__()
-        
-        self.Conv2ds = nn.ModuleList()
-        for kernel, out_channel in zip(kernel_sizes, out_channels):
-            padding = ((kernel-1)//2, (kernel-1)//2)
-            layer = nn.Sequential(
-                ConstrainedConv2d(
-                    in_channels = in_channels,
-                    out_channels = out_channel,
-                    kernel_size = kernel,
-                    padding = padding,
-                    padding_mode = "reflect",
-                    stride = stride))
-            self.Conv2ds.append(layer)
-                
-    def forward(self, x):
-        y = []
-        for Conv2d in self.Conv2ds: y.append(Conv2d(x)) 
-        return(torch.cat(y, dim = -3))
 
     
 
@@ -187,19 +156,19 @@ class SelfAttention(nn.Module):
     def __init__(self, in_channels, kernel_size = 1):
         super().__init__()
         padding_size = ((kernel_size-1)//2, (kernel_size-1)//2)
-        self.query = nn.Conv2d(
+        self.query = ConstrainedConv2d(
             in_channels = in_channels, 
             out_channels = in_channels // 8, 
             kernel_size = kernel_size, 
             padding = padding_size, 
             padding_mode = "reflect")
-        self.key   = nn.Conv2d(
+        self.key = ConstrainedConv2d(
             in_channels = in_channels, 
             out_channels = in_channels // 8, 
             kernel_size = kernel_size, 
             padding = padding_size, 
             padding_mode = "reflect")
-        self.value = nn.Conv2d(
+        self.value = ConstrainedConv2d(
             in_channels = in_channels, 
             out_channels = in_channels, 
             kernel_size = kernel_size, 
@@ -327,3 +296,46 @@ class CNN_Attention_Blend(nn.Module):
             x_2 = x_2 + attention
         x = self.x_out(x_2)
         return x
+    
+    
+    
+# Multi-Kernel CAB (MKC).
+class Multi_Kernel_CAB(nn.Module):
+    
+    def __init__(
+            self, 
+            in_shape = (16, 16, 16, 16), 
+            out_channels = [8, 8, 8, 8], 
+            kernel_sizes = [3, 3, 3, 3], 
+            grow = False,
+            shrink = False, 
+            paying_attention = False, 
+            attention_kernel_sizes = [1, 1, 1, 1], 
+            args = default_args):
+        super(Multi_Kernel_CAB, self).__init__()
+        
+        assert len(kernel_sizes) == len(out_channels) , "kernel_size length should match out_channel length."
+        if(paying_attention):
+            assert len(kernel_sizes) == len(attention_kernel_sizes) , "kernel_sizes length should match attention_kernel_size length."
+        else:
+            attention_kernel_sizes = kernel_sizes
+        
+        self.CABs = nn.ModuleList()
+        for i in range(len(kernel_sizes)):
+            layer = nn.Sequential(
+                CNN_Attention_Blend(
+                     in_shape = in_shape, 
+                     out_channels = out_channels[i], 
+                     kernel_size = kernel_sizes[i], 
+                     grow = grow,
+                     shrink = shrink, 
+                     paying_attention = paying_attention, 
+                     attention_kernel_size = attention_kernel_sizes[i], 
+                     args = default_args))
+            self.CABs.append(layer)
+                
+    def forward(self, x):
+        y = []
+        for CAB in self.CABs: 
+            y.append(CAB(x)) 
+        return(torch.cat(y, dim = -3))
