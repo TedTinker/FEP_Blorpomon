@@ -15,7 +15,7 @@ from io import BytesIO
 from PIL import Image
 
 from utils import get_random_batch, default_args
-from utils_for_torch import init_weights, var, sample, CNN_Attention_Blend, get_stats, add_position_layers
+from utils_for_torch import init_weights, var, sample, CNN_Attention_Blend, get_stats, add_position_layers, ConstrainedConv2d
 
 
 
@@ -36,7 +36,7 @@ class Discriminator(nn.Module):
         
         # Process images.
         self.images = nn.Sequential(
-            nn.Conv2d(
+            ConstrainedConv2d(
                 in_channels = example.shape[1], 
                 out_channels = 32,
                 kernel_size = 7,
@@ -49,7 +49,7 @@ class Discriminator(nn.Module):
                         
         # Process statistics.
         self.stats = nn.Sequential(
-            nn.Conv2d(
+            ConstrainedConv2d(
                 in_channels = example_stats.shape[1], 
                 out_channels = 32,
                 kernel_size = 7,

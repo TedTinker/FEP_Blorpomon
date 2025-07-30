@@ -250,7 +250,7 @@ class CNN_Attention_Blend(nn.Module):
         
         if(self.grow or (not self.grow and not self.shrink)):
             self.x_in = nn.Sequential(
-                nn.Conv2d(
+                ConstrainedConv2d(
                     in_channels = example.shape[1], 
                     out_channels = mid_channels,
                     kernel_size = kernel_size,
@@ -264,7 +264,7 @@ class CNN_Attention_Blend(nn.Module):
             
         if(self.shrink):
             self.x_in = nn.Sequential(
-                nn.Conv2d(
+                ConstrainedConv2d(
                     in_channels = example.shape[1], 
                     out_channels = mid_channels,
                     kernel_size = kernel_size,
@@ -291,7 +291,7 @@ class CNN_Attention_Blend(nn.Module):
             
         if(self.shrink or (not self.grow and not self.shrink)):
             self.x_out = nn.Sequential(
-                nn.Conv2d(
+                ConstrainedConv2d(
                     in_channels = example.shape[1], 
                     out_channels = out_channels,
                     kernel_size = kernel_size,
@@ -303,7 +303,7 @@ class CNN_Attention_Blend(nn.Module):
             
         if(self.grow):
             self.x_out = nn.Sequential(
-                nn.Conv2d(
+                ConstrainedConv2d(
                     in_channels = example.shape[1],
                     out_channels = out_channels,
                     kernel_size = kernel_size,
