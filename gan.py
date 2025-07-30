@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from utils import default_args, plot_positional_layers_gen, plot_positional_layers_dis, get_random_batch, \
     show_images_from_tensor, plot_vals, print, duration, make_animation
-from utils_for_torch import create_interpolated_tensor
+from utils_for_torch import create_interpolated_tensor, ConstrainedConv2d
 from generator import Generator
 from discriminator import Discriminator
 
@@ -108,6 +108,10 @@ class GAN:
             loss.backward()
             opt.step()
             
+            for module in dis.modules():
+                if isinstance(module, ConstrainedConv2d):
+                    module.clamp_weights()
+            
             torch.cuda.empty_cache()
             
             # Save information.
@@ -149,6 +153,10 @@ class GAN:
         loss_g += curiosity_loss     # Generator encouraged to make the discriminator have complexity.
         loss_g.backward()
         self.gen_opt.step()
+        
+        for module in self.gen.modules():
+            if isinstance(module, ConstrainedConv2d):
+                module.clamp_weights()
         
         torch.cuda.empty_cache()
         

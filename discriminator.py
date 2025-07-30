@@ -69,8 +69,8 @@ class Discriminator(nn.Module):
             nn.Dropout2d(p=self.args.dropout),
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [7], 
+                out_channels = [8, 8, 8, 8], 
+                kernel_sizes = [3, 5, 7, 9], 
                 grow = False,
                 shrink = True, 
                 paying_attention = False, 

@@ -37,16 +37,13 @@ def get_stats(x, args):
     x_flat = x.view(x.size(0), x.size(1), -1)  # (batch, channels, height * width)
     to_cat = []
     
-    #h_grad, v_grad = position_layers(x)
-    #to_cat.extend([h_grad, v_grad])
-
     batch_quantiles = [torch.quantile(x, q, dim=0, keepdim=True) for q in quantiles] # (1, channels, width, height)
     batch_quantiles_tiled = [q.repeat(batch_size, 1, 1, 1) for q in batch_quantiles]
     to_cat.extend(batch_quantiles_tiled)
     
-    #per_sample_quantiles = [torch.quantile(x_flat, q, dim=2, keepdim=True) for q in quantiles]  # shape: (batch, channels, 1)
-    #per_sample_quantiles_tiled = [q.unsqueeze(-1).expand(-1, -1, x.size(2), x.size(3)) for q in per_sample_quantiles]
-    #to_cat += per_sample_quantiles_tiled
+    per_sample_quantiles = [torch.quantile(x_flat, q, dim=2, keepdim=True) for q in quantiles]  # shape: (batch, channels, 1)
+    per_sample_quantiles_tiled = [q.unsqueeze(-1).expand(-1, -1, x.size(2), x.size(3)) for q in per_sample_quantiles]
+    to_cat += per_sample_quantiles_tiled
     
     x_reshaped = x.view(x.size(0), x.size(1), -1)
     pixel_quantiles = [torch.quantile(x_reshaped, q, dim=2, keepdim=True) for q in quantiles] # (batch, channels, 1)
@@ -57,9 +54,9 @@ def get_stats(x, args):
     batch_std_tiled = batch_std.repeat(batch_size, 1, 1, 1)
     to_cat.append(batch_std_tiled)
     
-    #per_sample_std = torch.std(x, dim=(2, 3), keepdim=True)
-    #per_sample_std_tiled = per_sample_std.repeat(1, 1, height, width)
-    #to_cat.append(per_sample_std_tiled)
+    per_sample_std = torch.std(x, dim=(2, 3), keepdim=True)
+    per_sample_std_tiled = per_sample_std.repeat(1, 1, height, width)
+    to_cat.append(per_sample_std_tiled)
 
     pixel_std = torch.std(x_reshaped, dim=2, keepdim=True) # (batch, channels, 1)
     pixel_std = pixel_std.unsqueeze(-1)
@@ -79,12 +76,11 @@ def get_stats(x, args):
     w = torch.where((v >= brightness_threshold_white) & (s <= saturation_threshold_white), torch.ones_like(v), torch.zeros_like(v))
     b = torch.where((v <= brightness_threshold_black) & (s <= saturation_threshold_black), -torch.ones_like(v), torch.zeros_like(v))
     wb = w + b
-    #to_cat.append(w)
-    #to_cat.append(wb) # These help the discriminator SO MUCH.
+    to_cat.append(wb) # These help the discriminator SO MUCH.
                 
     batch_wb_mean = torch.mean(wb, dim=0, keepdim=True) # (1, channels, height, width)
     batch_wb_mean_tiled = batch_wb_mean.repeat(args.batch_size, 1, 1, 1)
-    #to_cat.append(batch_wb_mean_tiled)
+    to_cat.append(batch_wb_mean_tiled)
     
     to_cat = [stat.to(args.device) for stat in to_cat]
     statistics = torch.cat(to_cat, dim = 1)
@@ -146,8 +142,12 @@ def add_position_layers(x, learned_pos, scale = 1):
 # CNN with capping.
 class ConstrainedConv2d(nn.Conv2d):
     def forward(self, input):
-        return nn.functional.conv2d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
-                                    self.padding, self.dilation, self.groups)
+        return nn.functional.conv2d(
+            input, self.weight, self.bias, self.stride,
+            self.padding, self.dilation, self.groups)
+
+    def clamp_weights(self):
+        self.weight.data.clamp_(-1.0, 1.0)
 
     
 

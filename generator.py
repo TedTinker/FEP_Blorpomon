@@ -41,8 +41,8 @@ class Generator(nn.Module):
             # 4 by 4
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [3], 
+                out_channels = [8, 24], 
+                kernel_sizes = [1, 3], 
                 grow = True,
                 shrink = False,
                 paying_attention = False, 
@@ -104,12 +104,12 @@ class Generator(nn.Module):
         self.c = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [5], 
+                out_channels = [8, 24], 
+                kernel_sizes = [3, 5], 
                 grow = True,
                 shrink = False,
                 paying_attention = True, 
-                attention_kernel_sizes = [5],
+                attention_kernel_sizes = [3, 5],
                 args = default_args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
@@ -124,12 +124,12 @@ class Generator(nn.Module):
         self.d = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [7], 
+                out_channels = [8, 8, 8, 8], 
+                kernel_sizes = [3, 5, 7, 9], 
                 grow = True,
                 shrink = False, 
                 paying_attention = True, 
-                attention_kernel_sizes = [7],
+                attention_kernel_sizes = [3, 5, 7, 9],
                 args = default_args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
@@ -145,8 +145,8 @@ class Generator(nn.Module):
         self.finish = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [7], 
+                out_channels = [8, 8, 8, 8], 
+                kernel_sizes = [3, 5, 7, 9], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
