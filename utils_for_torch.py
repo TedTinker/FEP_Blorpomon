@@ -32,19 +32,28 @@ def sample(mu, std):
 
 
 def sobel_edges(x):
+    print("1,", x.shape)
+    B, C, H, W = x.shape
     sobel_x = torch.tensor([[1, 0, -1],
                             [2, 0, -2],
                             [1, 0, -1]], dtype=torch.float32, device=x.device).view(1, 1, 3, 3)
-    sobel_y = sobel_x.transpose(2, 3)    
-    edge_x = F.conv2d(x, sobel_x, padding=1, groups=1)
-    edge_y = F.conv2d(x, sobel_y, padding=1, groups=1)
+    print("2,", sobel_x.shape)
+    sobel_x = sobel_x.repeat(C, 1, 1, 1)  # shape: [C, 1, 3, 3]
+    sobel_y = sobel_x.transpose(2, 3)     # shape: [C, 1, 3, 3]
+    print("3,", sobel_x.shape, sobel_y.shape)
+
+    edge_x = F.conv2d(x, sobel_x, padding=1, groups=C)
+    edge_y = F.conv2d(x, sobel_y, padding=1, groups=C)
+    print("4,", edge_x.shape, edge_y.shape)
+
     edge_magnitude = torch.sqrt(edge_x ** 2 + edge_y ** 2)
+    print("5,", edge_magnitude.shape)
     return edge_magnitude
 
 
 
 # Collecting statistics from batch.
-def get_stats(x, hsv, args):
+def get_stats(x, rgb, args):
     quantiles = args.stat_quantiles
     batch_size, num_channels, height, width = x.size()
     x_flat = x.view(x.size(0), x.size(1), -1)  # (batch, channels, height * width)
@@ -63,7 +72,7 @@ def get_stats(x, hsv, args):
     pixel_quantiles_tiled = [q.unsqueeze(-1).repeat(1, 1, height, width) for q in pixel_quantiles]
     to_cat.extend(pixel_quantiles_tiled)
     
-    batch_std = torch.std(x, dim=0, keepdim=True) # (1, channels, width, height)
+    batch_std = torch.std(x, dim=0, keepdim=True)
     batch_std_tiled = batch_std.repeat(batch_size, 1, 1, 1)
     to_cat.append(batch_std_tiled)
     
@@ -82,7 +91,7 @@ def get_stats(x, hsv, args):
     v = max_rgb
     s = delta / (max_rgb + 1e-7)  # Add a small constant to avoid division by zero
     
-    if(not hsv):
+    if(rgb):
         brightness_threshold_white = 0.9
         brightness_threshold_black = 0.9
         saturation_threshold_white = 0.1  # Low saturation to consider color close to grayscale for white
@@ -90,7 +99,7 @@ def get_stats(x, hsv, args):
         w = torch.where((v >= brightness_threshold_white) & (s <= saturation_threshold_white), torch.ones_like(v), torch.zeros_like(v))
         b = torch.where((v <= brightness_threshold_black) & (s <= saturation_threshold_black), -torch.ones_like(v), torch.zeros_like(v))
         wb = w + b
-        to_cat.append(wb) # These help the discriminator SO MUCH.
+        to_cat.append(wb)
                     
         batch_wb_mean = torch.mean(wb, dim=0, keepdim=True) # (1, channels, height, width)
         batch_wb_mean_tiled = batch_wb_mean.repeat(args.batch_size, 1, 1, 1)
@@ -206,12 +215,12 @@ class SelfAttention(nn.Module):
 
     def forward(self, x):
         B, C, H, W = x.size()
-        proj_query = self.query(x).view(B, -1, H * W).permute(0, 2, 1)   # B x HW x C'
-        proj_key   = self.key(x).view(B, -1, H * W)                      # B x C' x HW
-        energy     = torch.bmm(proj_query, proj_key)                    # B x HW x HW
+        proj_query = self.query(x).view(B, -1, H * W).permute(0, 2, 1)   
+        proj_key   = self.key(x).view(B, -1, H * W)                     
+        energy     = torch.bmm(proj_query, proj_key)                  
         attention  = F.softmax(energy, dim=-1)
-        proj_value = self.value(x).view(B, -1, H * W)                   # B x C x HW
-        out = torch.bmm(proj_value, attention.permute(0, 2, 1))        # B x C x HW
+        proj_value = self.value(x).view(B, -1, H * W)                  
+        out = torch.bmm(proj_value, attention.permute(0, 2, 1))       
         out = out.view(B, C, H, W)
         return self.gamma * out + x
     
@@ -253,7 +262,7 @@ class CNN_Attention_Blend(nn.Module):
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"),
-                nn.InstanceNorm2d(mid_channels, affine = True),
+                nn.BatchNorm2d(mid_channels),
                 nn.LeakyReLU())
             
             example = self.x_in(example)
@@ -269,7 +278,7 @@ class CNN_Attention_Blend(nn.Module):
                     padding_mode = "reflect"),
                 #nn.AvgPool2d(kernel_size = 2, stride = 2),
                 SpaceToDepth(block_size=2),  
-                nn.InstanceNorm2d(mid_channels * 4, affine = True),
+                nn.BatchNorm2d(mid_channels * 4),
                 nn.LeakyReLU())
             
             example = self.x_in(example)

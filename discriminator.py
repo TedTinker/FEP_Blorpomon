@@ -15,7 +15,7 @@ from io import BytesIO
 from PIL import Image
 
 from utils import get_random_batch, default_args
-from utils_for_torch import init_weights, var, sample, Multi_Kernel_CAB, get_stats, add_position_layers, ConstrainedConv2d, rgb_to_circular_hsv
+from utils_for_torch import init_weights, var, sample, Multi_Kernel_CAB, SpaceToDepth, get_stats, add_position_layers, ConstrainedConv2d, rgb_to_circular_hsv
 
 
 
@@ -32,34 +32,40 @@ class Discriminator(nn.Module):
         
         if(self.args.use_hsv):
             example_hsv = rgb_to_circular_hsv(example)
-            print("\nDis HSV:", example_hsv.shape)
+            print("Dis HSV:", example_hsv.shape)
         
         channels_for_pos = 1
-        self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
-        example = add_position_layers(example, self.learned_pos_64, scale = 4)
-        example_stats = get_stats(example, False, self.args).cpu()
+        self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
+        example = add_position_layers(example, self.learned_pos_64, scale = 8)
+        example_stats = get_stats(example, True, self.args).cpu()
         
         # Process images.
         self.images = nn.Sequential(
-            ConstrainedConv2d(
-                in_channels = example.shape[1], 
-                out_channels = 32,
-                kernel_size = 3,
-                padding = 1,
-                padding_mode = "reflect"),
+            Multi_Kernel_CAB(
+                in_shape = example.shape, 
+                out_channels = [32], 
+                kernel_sizes = [7], 
+                grow = False,
+                shrink = False, 
+                paying_attention = False, 
+                args = self.args),
             nn.BatchNorm2d(32),
-            nn.LeakyReLU())
+            nn.LeakyReLU(),
+            nn.Dropout2d(p=self.args.dropout))
                                 
         # Process statistics.
         self.stats = nn.Sequential(
-            ConstrainedConv2d(
-                in_channels = example_stats.shape[1], 
-                out_channels = 32,
-                kernel_size = 3,
-                padding = 1,
-                padding_mode = "reflect"),
+            Multi_Kernel_CAB(
+                in_shape = example_stats.shape, 
+                out_channels = [32], 
+                kernel_sizes = [7], 
+                grow = False,
+                shrink = False, 
+                paying_attention = False, 
+                args = self.args),
             nn.BatchNorm2d(32),
-            nn.LeakyReLU())
+            nn.LeakyReLU(),
+            nn.Dropout2d(p=self.args.dropout))
                 
         example_image = self.images(example)
         example_stats = self.stats(example_stats)
@@ -68,28 +74,34 @@ class Discriminator(nn.Module):
         
         # Process images HSV.
         if(self.args.use_hsv):
-            example_hsv = add_position_layers(example_hsv, self.learned_pos_64, scale = 4)
-            example_hsv_stats = get_stats(example_hsv, True, self.args).cpu()
+            example_hsv = add_position_layers(example_hsv, self.learned_pos_64, scale = 8)
+            example_hsv_stats = get_stats(example_hsv, False, self.args).cpu()
             
             self.hsv = nn.Sequential(
-                ConstrainedConv2d(
-                    in_channels = example_hsv.shape[1], 
-                    out_channels = 32,
-                    kernel_size = 3,
-                    padding = 1,
-                    padding_mode = "reflect"),
+                Multi_Kernel_CAB(
+                    in_shape = example_hsv.shape, 
+                    out_channels = [32], 
+                    kernel_sizes = [7], 
+                    grow = False,
+                    shrink = False, 
+                    paying_attention = False, 
+                    args = self.args),
                 nn.BatchNorm2d(32),
-                nn.LeakyReLU())
+                nn.LeakyReLU(),
+                nn.Dropout2d(p=self.args.dropout))
             
             self.hsv_stats = nn.Sequential(
-                ConstrainedConv2d(
-                    in_channels = example_hsv_stats.shape[1], 
-                    out_channels = 32,
-                    kernel_size = 3,
-                    padding = 1,
-                    padding_mode = "reflect"),
+                Multi_Kernel_CAB(
+                    in_shape = example_hsv_stats.shape, 
+                    out_channels = [32], 
+                    kernel_sizes = [7], 
+                    grow = False,
+                    shrink = False, 
+                    paying_attention = False, 
+                    args = self.args),
                 nn.BatchNorm2d(32),
-                nn.LeakyReLU())
+                nn.LeakyReLU(),
+                nn.Dropout2d(p=self.args.dropout))
             
             example_hsv = self.hsv(example_hsv)
             example_hsv_stats = self.hsv_stats(example_hsv_stats)
@@ -99,37 +111,32 @@ class Discriminator(nn.Module):
         # CNNs shrinking image size.
         self.a = nn.Sequential(
             # 64 by 64
-            nn.Dropout2d(p=self.args.dropout),
-            Multi_Kernel_CAB(
-                in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [3], 
-                grow = False,
-                shrink = True, 
-                paying_attention = False, 
-                args = default_args),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(
+                in_channels = example.shape[1], 
+                out_channels = 32,
+                kernel_size = 3,
+                padding = 1,
+                padding_mode = "reflect"),
+            SpaceToDepth(block_size=2),  
+            nn.BatchNorm2d(128),
             nn.LeakyReLU(),
             nn.Dropout2d(p=self.args.dropout))
         
         example = self.a(example)
         channels_for_pos = 1
-        self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
-        example = add_position_layers(example, self.learned_pos_32, scale = 2)
+        self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
+        example = add_position_layers(example, self.learned_pos_32, scale = 4)
         print("Dis a:", example.shape)
         
         self.b = nn.Sequential(
             # 32 by 32
-            nn.Dropout2d(p=self.args.dropout),
-            Multi_Kernel_CAB(
-                in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [3], 
-                grow = False,
-                shrink = True, 
-                paying_attention = True, 
-                attention_kernel_sizes = [3],
-                args = default_args),
+            nn.Conv2d(
+                in_channels = example.shape[1], 
+                out_channels = 32,
+                kernel_size = 3,
+                padding = 1,
+                padding_mode = "reflect"),
+            nn.AvgPool2d(kernel_size = 2, stride = 2),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             nn.Dropout2d(p=self.args.dropout))
@@ -142,29 +149,27 @@ class Discriminator(nn.Module):
         print("Dis b:", example.shape)
         
         self.c = nn.Sequential(
-            Multi_Kernel_CAB(
-                in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [3], 
-                grow = False,
-                shrink = True, 
-                paying_attention = True, 
-                attention_kernel_sizes = [3],
-                args = default_args),
+            nn.Conv2d(
+                in_channels = example.shape[1], 
+                out_channels = 32,
+                kernel_size = 3,
+                padding = 1,
+                padding_mode = "reflect"),
+            nn.AvgPool2d(kernel_size = 2, stride = 2),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
-            # 8 by 8
             nn.Dropout2d(p=self.args.dropout),
-            Multi_Kernel_CAB(
-                in_shape = (example.shape[0], 32, example.shape[2], example.shape[3]), 
-                out_channels = [32], 
-                kernel_sizes = [3], 
-                grow = False,
-                shrink = True, 
-                paying_attention = False, 
-                args = default_args),
+            # 8 by 8
+            nn.Conv2d(
+                in_channels = 32, 
+                out_channels = 32,
+                kernel_size = 3,
+                padding = 1,
+                padding_mode = "reflect"),
+            nn.AvgPool2d(kernel_size = 2, stride = 2),
             nn.BatchNorm2d(32),
-            nn.LeakyReLU())
+            nn.LeakyReLU(),
+            nn.Dropout2d(p=self.args.dropout))
             # 4 by 4
                 
         example = self.c(example).view(self.args.batch_size, -1)
@@ -202,26 +207,26 @@ class Discriminator(nn.Module):
         
         if(self.args.use_hsv):
             hsv = rgb_to_circular_hsv(images)
-            hsv = add_position_layers(hsv, self.learned_pos_64, scale = 4)
+            hsv = add_position_layers(hsv, self.learned_pos_64, scale = 8)
             
         images = (images * 2) - 1
-        images = add_position_layers(images, self.learned_pos_64, scale = 4)
+        images = add_position_layers(images, self.learned_pos_64, scale = 8)
                         
         # Process statistics and images.
-        stats = get_stats(images, False, self.args)
+        stats = get_stats(images, True, self.args)
         stats = self.stats(stats)
         images = self.images(images)
         images = torch.cat([images, stats], dim = 1)
         
         if(self.args.use_hsv):
-            hsv_stats = get_stats(hsv, True, self.args)
+            hsv_stats = get_stats(hsv, False, self.args)
             hsv_stats = self.hsv_stats(hsv_stats)
             hsv = self.hsv(hsv)
             images = torch.cat([images, hsv, hsv_stats], dim = 1)
     
         # Shrinking and flattening.
         a = self.a(images)
-        a = add_position_layers(a, self.learned_pos_32, scale = 2)
+        a = add_position_layers(a, self.learned_pos_32, scale = 4)
         
         b = self.b(a)
         b = add_position_layers(b, self.learned_pos_16, scale = 2)

@@ -41,12 +41,12 @@ class Generator(nn.Module):
             # 4 by 4
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [8, 24], 
-                kernel_sizes = [1, 3], 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = True,
                 shrink = False,
                 paying_attention = False, 
-                args = default_args),
+                args = self.args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU()
             # 8 by 8           
@@ -59,22 +59,22 @@ class Generator(nn.Module):
         self.mu = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [8, 24], 
-                kernel_sizes = [1, 3], 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
-                args = default_args))
+                args = self.args))
         
         self.std = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [8, 24], 
-                kernel_sizes = [1, 3], 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
-                args = default_args),
+                args = self.args),
             nn.Softplus())
         
         example_mu, example_std = var(example, self.mu, self.std, self.args)
@@ -85,12 +85,12 @@ class Generator(nn.Module):
         self.b = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [8, 24], 
-                kernel_sizes = [1, 3], 
+                out_channels = [32], 
+                kernel_sizes = [3], 
                 grow = True,
                 shrink = False,
                 paying_attention = False, 
-                args = default_args),
+                args = self.args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
             # 16 by 16
@@ -104,13 +104,13 @@ class Generator(nn.Module):
         self.c = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [8, 16, 8], 
-                kernel_sizes = [1, 3, 5], 
+                out_channels = [24, 8], 
+                kernel_sizes = [3, 5], 
                 grow = True,
                 shrink = False,
                 paying_attention = True, 
-                attention_kernel_sizes = [1, 3, 5],
-                args = default_args),
+                attention_kernel_sizes = [3, 5],
+                args = self.args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
             # 32 by 32
@@ -124,13 +124,13 @@ class Generator(nn.Module):
         self.d = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [8, 8, 8, 8], 
-                kernel_sizes = [1, 3, 5, 7], 
+                out_channels = [16, 8, 8], 
+                kernel_sizes = [3, 5, 7], 
                 grow = True,
                 shrink = False, 
                 paying_attention = True, 
-                attention_kernel_sizes = [1, 3, 5, 7],
-                args = default_args),
+                attention_kernel_sizes = [3, 5, 7],
+                args = self.args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU())
             # 64 by 64     
@@ -145,12 +145,12 @@ class Generator(nn.Module):
         self.finish = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [8, 8, 8, 8], 
-                kernel_sizes = [1, 3, 5, 7], 
+                out_channels = [16, 8, 8], 
+                kernel_sizes = [3, 5, 7], 
                 grow = False,
                 shrink = False,
                 paying_attention = False, 
-                args = default_args),
+                args = self.args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             # Finish

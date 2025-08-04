@@ -273,7 +273,7 @@ def make_animation(save_dir, image_name='1.png', output_name='animation_1.gif'):
 
     images = []
     for folder in folders:
-        print(f"Folder {folder}.")
+        print(f"Folder {folder}...", end = " ")
         path = os.path.join(save_dir, folder, image_name)
         if os.path.exists(path):
             images.append(imageio.imread(path))
@@ -285,93 +285,116 @@ def make_animation(save_dir, image_name='1.png', output_name='animation_1.gif'):
     
     
 # Plotting losses, entropy, curiosity, etc.
-def plot_vals(plot_vals_dict, save_path='losses.png', fontsize = 7):
-    # Calculate average discriminator losses
-    avg_dis_loss_real = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_losses_real"]]
-    avg_dis_loss_fake = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_losses_fake"]]
-    avg_dis_complexity_loss = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_complexity_loss"]]
-        
-    # Calculate average discriminator correct rates
-    avg_correct_rate_real = [100 * sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_correct_rate_real"]]
-    avg_correct_rate_fake = [100 * sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_correct_rate_fake"]]
-    
-    # Calculate average discriminator mu and std
-    avg_mu  = [sum(epoch)/len(epoch) for epoch in plot_vals_dict["dis_mu"]]
-    avg_std_fake = [log(sum(epoch)/len(epoch)) for epoch in plot_vals_dict["dis_std_fake"]]
-    avg_std_real = [log(sum(epoch)/len(epoch)) for epoch in plot_vals_dict["dis_std_real"]]
-        
+def plot_vals(plot_vals_dict, save_path='losses.png', fontsize=7):
     # Define epochs
     epochs = range(1, len(plot_vals_dict["gen_loss"]) + 1)
-    
-    # Plot losses
+
+    # Calculate per-discriminator values
+    num_dis = len(plot_vals_dict["dis_losses_real"][0])
+
+    def get_dis_vals(key):
+        # Transpose: from list of epochs of lists → list of lists per discriminator
+        return list(zip(*plot_vals_dict[key]))
+
+    dis_losses_real = get_dis_vals("dis_losses_real")
+    dis_losses_fake = get_dis_vals("dis_losses_fake")
+    dis_complexity_loss = get_dis_vals("dis_complexity_loss")
+    dis_correct_rate_real = [[100 * val for val in d] for d in get_dis_vals("dis_correct_rate_real")]
+    dis_correct_rate_fake = [[100 * val for val in d] for d in get_dis_vals("dis_correct_rate_fake")]
+    dis_mu = get_dis_vals("dis_mu")
+    dis_std_real = [[log(val) for val in d] for d in get_dis_vals("dis_std_real")]
+    dis_std_fake = [[log(val) for val in d] for d in get_dis_vals("dis_std_fake")]
+
+    # Plotting
     plt.figure(figsize=(12, 6))
-    
-    total_gen_loss = []
-    for l, e, c in zip(plot_vals_dict["gen_loss"], plot_vals_dict["gen_entropy_loss"], plot_vals_dict["gen_curiosity_loss"]):
-        total_gen_loss.append(l + e + c)
+
+    # Generator Losses
+    total_gen_loss = [
+        l + e + c
+        for l, e, c in zip(plot_vals_dict["gen_loss"],
+                           plot_vals_dict["gen_entropy_loss"],
+                           plot_vals_dict["gen_curiosity_loss"])
+    ]
     plt.subplot(2, 3, 1)
-    plt.plot(epochs, plot_vals_dict["gen_loss"], 'red', label="Generator Loss", alpha = .8)
-    plt.plot(epochs, plot_vals_dict["gen_entropy_loss"], 'green', label="Loss for Entropy", alpha = .8)
-    plt.plot(epochs, plot_vals_dict["gen_curiosity_loss"], 'blue', label="Loss for Curiosity", alpha = .8)
-    plt.plot(epochs, total_gen_loss, 'black', label="Total", alpha = .8)
+    plt.plot(epochs, plot_vals_dict["gen_loss"], 'red', label="Generator Loss", alpha=0.8)
+    plt.plot(epochs, plot_vals_dict["gen_entropy_loss"], 'green', label="Loss for Entropy", alpha=0.8)
+    plt.plot(epochs, plot_vals_dict["gen_curiosity_loss"], 'blue', label="Loss for Curiosity", alpha=0.8)
+    plt.plot(epochs, total_gen_loss, 'black', label="Total", alpha=0.8)
     plt.xlabel("Epochs")
     plt.ylabel("Generator Loss")
     plt.ylim(-1, 25)
     plt.title("Generator Losses Over Epochs")
     plt.legend(fontsize=fontsize)
     plt.grid(True)
-    
-    total_dis_loss = []
-    for r, f, c in zip(avg_dis_loss_real, avg_dis_loss_fake, avg_dis_complexity_loss):
-        total_dis_loss.append(r + f + c)
+
+    # Discriminator Losses
     plt.subplot(2, 3, 2)
-    plt.plot(epochs, avg_dis_loss_real, 'red', label="Discriminator Loss (real images)", alpha = .8)
-    plt.plot(epochs, avg_dis_loss_fake, 'green', label="Discriminator Loss (fake images)", alpha = .8)
-    #plt.plot(epochs, avg_dis_complexity_loss, 'blue', label="Loss for Complexity", alpha = .8)
-    plt.plot(epochs, total_dis_loss, 'black', label="Total", alpha = .8)
+    for i in range(num_dis):
+        label = "Discriminator Loss (real)" if i == 0 else None
+        plt.plot(epochs, dis_losses_real[i], 'red', alpha=0.4, label=label)
+        label = "Discriminator Loss (fake)" if i == 0 else None
+        plt.plot(epochs, dis_losses_fake[i], 'green', alpha=0.4, label=label)
+        label = "Discriminator Loss (complexity)" if i == 0 else None
+        plt.plot(epochs, dis_complexity_loss[i], 'blue', alpha=0.4, label=label)
+
+    total_dis_loss = []
+    for r, f, c in zip(dis_losses_real, dis_losses_fake, dis_complexity_loss):
+        summed = [ri + fi + ci for ri, fi, ci in zip(r, f, c)]
+        total_dis_loss.append(summed)
+        
+    for i in range(num_dis):
+        label = "Total" if i == 0 else None
+        plt.plot(epochs, total_dis_loss[i], 'black', label=label, alpha=0.8)
     plt.xlabel("Epochs")
     plt.ylabel("Discriminator Loss")
     plt.ylim(0, 3)
     plt.title("Discriminator Losses Over Epochs")
     plt.legend(fontsize=fontsize)
     plt.grid(True)
-    
-    # Plot correct rates
+
+    # Correct Rates
     plt.subplot(2, 3, 3)
-    plt.plot(epochs, avg_correct_rate_real, 'red', label="Correct Rate (real images)", alpha = .8)
-    plt.plot(epochs, avg_correct_rate_fake, 'green', label="Correct Rate (fake images)", alpha = .8)
+    for i in range(num_dis):
+        label = "Correct Rate (real)" if i == 0 else None
+        plt.plot(epochs, dis_correct_rate_real[i], 'red', alpha=0.4, label=label)
+        label = "Correct Rate (fake)" if i == 0 else None
+        plt.plot(epochs, dis_correct_rate_fake[i], 'green', alpha=0.4, label=label)
     plt.xlabel("Epochs")
-    plt.ylabel("Correct Rate")
+    plt.ylabel("Correct Rate (%)")
     plt.ylim(0, 100)
     plt.title("Discriminator Correct Rates Over Epochs")
     plt.legend(fontsize=fontsize)
     plt.grid(True)
-    
-    # Plot generator std
+
+    # Generator STD
     plt.subplot(2, 3, 4)
-    plt.plot(epochs, plot_vals_dict["gen_std"], 'red', label="Generator STD", alpha = .8)
+    plt.plot(epochs, plot_vals_dict["gen_std"], 'red', label="Generator STD", alpha=0.8)
     plt.xlabel("Epochs")
-    plt.ylabel("Value")
+    plt.ylabel("STD")
     plt.ylim(0, 1.3)
     plt.title("Generator Standard Deviation")
     plt.legend(fontsize=fontsize)
     plt.grid(True)
-    
-    # Plot discriminator stda
+
+    # Discriminator STD (log)
     plt.subplot(2, 3, 5)
-    plt.plot(epochs, avg_std_real, 'red', label="Log Discriminator STD (real images)", alpha = .8)
-    plt.plot(epochs, avg_std_fake, 'green', label="Log Discriminator STD (fake images)", alpha = .8)
+    for i in range(num_dis):
+        label = "Log STD (real)" if i == 0 else None
+        plt.plot(epochs, dis_std_real[i], 'red', alpha=0.4, label=label)
+        label = "Log STD (fake)" if i == 0 else None
+        plt.plot(epochs, dis_std_fake[i], 'green', alpha=0.4, label=label)
     plt.xlabel("Epochs")
-    plt.ylabel("Value")
-    plt.ylim(-8, .1)
-    plt.title("Discriminator Standard Deviations")
+    plt.ylabel("Log STD")
+    plt.ylim(-8, 0.1)
+    plt.title("Discriminator Log-Standard Deviations")
     plt.legend(fontsize=fontsize)
     plt.grid(True)
-    
+
     plt.tight_layout()
     save_path = f"generated_images/{save_path}"
     plt.savefig(save_path)
     plt.close()
+
     
     
     
