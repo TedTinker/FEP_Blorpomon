@@ -278,7 +278,7 @@ class CNN_Attention_Blend(nn.Module):
                 nn.BatchNorm2d(mid_channels),
                 nn.LeakyReLU())
             
-            example = self.x_in(example)
+            example_2 = self.x_in(example)
             print("CAB in:", example.shape)
             
         if(self.shrink):
@@ -289,41 +289,42 @@ class CNN_Attention_Blend(nn.Module):
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"),
-                #nn.AvgPool2d(kernel_size = 2, stride = 2),
                 SpaceToDepth(block_size=2),  
                 nn.BatchNorm2d(mid_channels * 4),
                 nn.LeakyReLU())
             
-            example = self.x_in(example)
+            example_2 = self.x_in(example)
             print("CAB in (shrink):", example.shape)
         
         
         
         if(paying_attention):
+            if(self.shrink):
+                example = space_to_depth(example, 2)
             self.attention = nn.Sequential(
                 SelfAttention(in_channels = example.shape[1], kernel_size = attention_kernel_size))
-            
             example = self.attention(example)
-            print("CAB attention:", example.shape)
+            example_2 = example + example_2
+            print("CAB attention:", example_2.shape)
             
             
             
         if(self.shrink or (not self.grow and not self.shrink)):
             self.x_out = nn.Sequential(
                 ConstrainedConv2d(
-                    in_channels = example.shape[1], 
+                    in_channels = example_2.shape[1], 
                     out_channels = out_channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
                     padding_mode = "reflect"))
 
-            example = self.x_out(example)
+            example = self.x_out(example_2)
             print("CAB out:", example.shape)
             
         if(self.grow):
             self.x_out = nn.Sequential(
                 ConstrainedConv2d(
-                    in_channels = example.shape[1],
+                    in_channels = example_2.shape[1],
                     out_channels = out_channels,
                     kernel_size = kernel_size,
                     padding = padding_size,
@@ -333,14 +334,13 @@ class CNN_Attention_Blend(nn.Module):
                     mode = "bilinear",
                     align_corners = True))
             
-            example = self.x_out(example)
+            example = self.x_out(example_2)
             print("CAB out (grow):", example.shape)
     
     def forward(self, x):
         x_2 = self.x_in(x)
         if(self.paying_attention):
             if(self.shrink):
-                #x = F.avg_pool2d(input = x, kernel_size = 2, stride = 2)
                 x = space_to_depth(x, 2)
             attention = self.attention(x)
             x_2 = x_2 + attention
