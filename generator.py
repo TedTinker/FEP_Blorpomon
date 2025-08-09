@@ -117,8 +117,8 @@ class Generator(nn.Module):
             
         example = self.c(example)
         channels_for_pos = 3
-        self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
-        example = add_position_layers(example, self.learned_pos_32, scale = 2)
+        self.learned_pos_32 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
+        example = add_position_layers(example, self.learned_pos_32, scale = 4)
         print("Gen c:", example.shape)
         
         self.d = nn.Sequential(
@@ -137,8 +137,8 @@ class Generator(nn.Module):
 
         example = self.d(example)
         channels_for_pos = 3
-        self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 16, 16) * .5)
-        example = add_position_layers(example, self.learned_pos_64, scale = 4)
+        self.learned_pos_64 = nn.Parameter(torch.ones(1, channels_for_pos, 8, 8) * .5)
+        example = add_position_layers(example, self.learned_pos_64, scale = 8)
         print("Gen d:", example.shape)
         
         # CNNs growing image and finishing image.         
@@ -193,11 +193,11 @@ class Generator(nn.Module):
         
         # Grow.
         c = self.c(b)
-        c = add_position_layers(c, self.learned_pos_32, scale = 2)
+        c = add_position_layers(c, self.learned_pos_32, scale = 4)
         
         # Grow.
         d = self.d(c)
-        d = add_position_layers(d, self.learned_pos_64, scale = 4)
+        d = add_position_layers(d, self.learned_pos_64, scale = 8)
         
         # Finish.
         out = self.finish(d)
@@ -217,5 +217,5 @@ if(__name__ == "__main__"):
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
         with record_function("model_inference"):
             print(summary(gen, (args.batch_size, default_args.seed_size)))
-    #print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
 # %%

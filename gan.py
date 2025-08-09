@@ -55,7 +55,7 @@ class GAN:
             }
         
         self.epochs = 1
-        self.skipped_dis = []
+        self.trained_dis = {i : 0 for i in range(len(self.dis_list))}
         self.session_start_time = datetime.datetime.now()
         
     # One step of training.
@@ -97,7 +97,16 @@ class GAN:
         
         # Train discriminators.
         for i, (dis, opt) in enumerate(zip(self.dis_list, self.dis_opts)):
-            if(self.epochs == 1 or self.plot_vals_dict["dis_correct_rate_fake"][-2][i] < 1 - 1/self.args.batch_size):
+            train_dis = self.epochs == 1
+            if(not train_dis):
+                num_vals = min(self.args.rolling_avg_num, len(self.plot_vals_dict["dis_correct_rate_fake"]) - 1)
+                rolling_avg = 0
+                for j in range(num_vals):
+                    rolling_avg += self.plot_vals_dict["dis_correct_rate_fake"][-2 - j][i]
+                rolling_avg /= num_vals
+                train_dis = rolling_avg < self.args.rolling_avg_val
+
+            if(train_dis):
                 opt.zero_grad()
                 
                 # Process fake images.
@@ -117,9 +126,8 @@ class GAN:
                 loss = loss_real + loss_fake 
                 complexity_loss = self.args.dis_alpha * (complexity_real_loss + complexity_fake_loss)
                 loss += complexity_loss     # Discriminator encouraged to minimize its entropy.
-                if(self.epochs > 1 and self.plot_vals_dict["dis_correct_rate_fake"][-2][i] < 1 - 2/64):
-                    loss.backward()
-                    opt.step()
+                loss.backward()
+                opt.step()
                 
                 for module in dis.modules():
                     if isinstance(module, ConstrainedConv2d):
@@ -128,6 +136,7 @@ class GAN:
                 torch.cuda.empty_cache()
                 
                 # Save information.
+                self.trained_dis[i] +=1
                 self.plot_vals_dict["dis_losses_fake"][-1].append(loss_fake.item())
                 self.plot_vals_dict["dis_correct_rate_real"][-1].append(correct_real)
                 self.plot_vals_dict["dis_losses_real"][-1].append(loss_real.item())
@@ -137,7 +146,6 @@ class GAN:
                 self.plot_vals_dict["dis_std_fake"][-1].append(std_fake.mean().item())
                 
             else:
-                self.skipped_dis.append(i)
                 self.plot_vals_dict["dis_losses_fake"][-1].append(self.plot_vals_dict["dis_losses_fake"][-2][i])
                 self.plot_vals_dict["dis_correct_rate_real"][-1].append(self.plot_vals_dict["dis_correct_rate_real"][-2][i])
                 self.plot_vals_dict["dis_losses_real"][-1].append(self.plot_vals_dict["dis_losses_real"][-2][i])
@@ -191,11 +199,10 @@ class GAN:
             plot_vals(self.plot_vals_dict, save_path = f'{self.args.arg_name}/epoch_{str(self.epochs).zfill(5)}/losses.png')
             plot_positional_layers_gen(self)
             plot_positional_layers_dis(self)
-            counts = dict(Counter(self.skipped_dis))
             print(f"Session Duration: {duration(self.session_start_time)}")
             print(f"Total Duration: {duration()}")
-            print(counts)
-            self.skipped_dis = []
+            print(f"Discriminator Training: {list(self.trained_dis.values())}", "\n")
+            self.trained_dis = {i : 0 for i in range(len(self.dis_list))}
             self.session_start_time = datetime.datetime.now()
             
             torch.cuda.empty_cache()

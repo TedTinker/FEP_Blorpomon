@@ -89,10 +89,14 @@ parser.add_argument("--gen_lr",                         type=float,     default 
                     help='Learning rate for generator.') 
 parser.add_argument("--dis_lr",                         type=float,     default = .0001,
                     help='Learning rate for discriminator')  
-parser.add_argument("--dises",                          type=int,       default = 2,
+parser.add_argument("--dises",                          type=int,       default = 5,
                     help='How many discriminators?') 
 parser.add_argument("--flips",                          type=int,       default = 4,
                     help='How many real images and fake images are swapped?') 
+parser.add_argument("--rolling_avg_num",                type=int,       default = 10,
+                    help='How many values used in the rolling average?') 
+parser.add_argument("--rolling_avg_val",                type=float,     default = .95,
+                    help='Max value of discriminator accuracy for training.')  
 parser.add_argument("--min_real",                       type=float,     default = .7,
                     help='Real images are typically labeled as 1, but it can help to reduce that.') 
 parser.add_argument("--max_real",                       type=float,     default = .9,

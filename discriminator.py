@@ -43,8 +43,8 @@ class Discriminator(nn.Module):
         self.images = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example.shape, 
-                out_channels = [32], 
-                kernel_sizes = [7], 
+                out_channels = [16, 8, 8], 
+                kernel_sizes = [3, 5, 7], 
                 grow = False,
                 shrink = False, 
                 paying_attention = False, 
@@ -57,8 +57,8 @@ class Discriminator(nn.Module):
         self.stats = nn.Sequential(
             Multi_Kernel_CAB(
                 in_shape = example_stats.shape, 
-                out_channels = [32], 
-                kernel_sizes = [7], 
+                out_channels = [16, 8, 8], 
+                kernel_sizes = [3, 5, 7], 
                 grow = False,
                 shrink = False, 
                 paying_attention = False, 
@@ -80,8 +80,8 @@ class Discriminator(nn.Module):
             self.hsv = nn.Sequential(
                 Multi_Kernel_CAB(
                     in_shape = example_hsv.shape, 
-                    out_channels = [32], 
-                    kernel_sizes = [7], 
+                    out_channels = [16, 8, 8], 
+                    kernel_sizes = [3, 5, 7], 
                     grow = False,
                     shrink = False, 
                     paying_attention = False, 
@@ -93,8 +93,8 @@ class Discriminator(nn.Module):
             self.hsv_stats = nn.Sequential(
                 Multi_Kernel_CAB(
                     in_shape = example_hsv_stats.shape, 
-                    out_channels = [32], 
-                    kernel_sizes = [7], 
+                    out_channels = [16, 8, 8], 
+                    kernel_sizes = [3, 5, 7], 
                     grow = False,
                     shrink = False, 
                     paying_attention = False, 
@@ -111,14 +111,15 @@ class Discriminator(nn.Module):
         # CNNs shrinking image size.
         self.a = nn.Sequential(
             # 64 by 64
-            nn.Conv2d(
-                in_channels = example.shape[1], 
-                out_channels = 32,
-                kernel_size = 3,
-                padding = 1,
-                padding_mode = "reflect"),
-            SpaceToDepth(block_size=2),  
-            nn.BatchNorm2d(128),
+            Multi_Kernel_CAB(
+                in_shape = example.shape, 
+                out_channels = [16, 8, 8], 
+                kernel_sizes = [3, 5, 7], 
+                grow = False,
+                shrink = True, 
+                paying_attention = False, 
+                args = self.args),
+            nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             nn.Dropout2d(p=self.args.dropout))
         
@@ -130,13 +131,14 @@ class Discriminator(nn.Module):
         
         self.b = nn.Sequential(
             # 32 by 32
-            nn.Conv2d(
-                in_channels = example.shape[1], 
-                out_channels = 32,
-                kernel_size = 3,
-                padding = 1,
-                padding_mode = "reflect"),
-            nn.AvgPool2d(kernel_size = 2, stride = 2),
+            Multi_Kernel_CAB(
+                in_shape = example.shape, 
+                out_channels = [16, 8, 8], 
+                kernel_sizes = [3, 5, 7], 
+                grow = False,
+                shrink = True, 
+                paying_attention = False, 
+                args = self.args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             nn.Dropout2d(p=self.args.dropout))
@@ -149,24 +151,25 @@ class Discriminator(nn.Module):
         print("Dis b:", example.shape)
         
         self.c = nn.Sequential(
-            nn.Conv2d(
-                in_channels = example.shape[1], 
-                out_channels = 32,
-                kernel_size = 3,
-                padding = 1,
-                padding_mode = "reflect"),
-            nn.AvgPool2d(kernel_size = 2, stride = 2),
+            Multi_Kernel_CAB(
+                in_shape = example.shape, 
+                out_channels = [24, 8], 
+                kernel_sizes = [3, 5],  
+                grow = False,
+                shrink = True, 
+                paying_attention = False, 
+                args = self.args),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             nn.Dropout2d(p=self.args.dropout),
             # 8 by 8
             nn.Conv2d(
                 in_channels = 32, 
-                out_channels = 32,
+                out_channels = 8,
                 kernel_size = 3,
                 padding = 1,
                 padding_mode = "reflect"),
-            nn.AvgPool2d(kernel_size = 2, stride = 2),
+            SpaceToDepth(block_size=2),  
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             nn.Dropout2d(p=self.args.dropout))
@@ -255,7 +258,7 @@ if(__name__ == "__main__"):
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
         with record_function("model_inference"):
             print(summary(dis, (args.batch_size, 3, args.image_size, args.image_size)))
-    #print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
         
     
 

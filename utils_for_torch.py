@@ -59,18 +59,32 @@ def get_stats(x, rgb, args):
     x_flat = x.view(x.size(0), x.size(1), -1)  # (batch, channels, height * width)
     to_cat = []
     
-    batch_quantiles = [torch.quantile(x, q, dim=0, keepdim=True) for q in quantiles] # (1, channels, width, height)
-    batch_quantiles_tiled = [q.repeat(batch_size, 1, 1, 1) for q in batch_quantiles]
-    to_cat.extend(batch_quantiles_tiled)
+    # Consider removing this for speed. 
+    #batch_quantiles = [torch.quantile(x, q, dim=0, keepdim=True) for q in quantiles] # (1, channels, width, height)
+    #batch_quantiles_tiled = [q.repeat(batch_size, 1, 1, 1) for q in batch_quantiles]
+    #to_cat.extend(batch_quantiles_tiled)
     
-    per_sample_quantiles = [torch.quantile(x_flat, q, dim=2, keepdim=True) for q in quantiles]  # shape: (batch, channels, 1)
-    per_sample_quantiles_tiled = [q.unsqueeze(-1).expand(-1, -1, x.size(2), x.size(3)) for q in per_sample_quantiles]
-    to_cat += per_sample_quantiles_tiled
+    #per_sample_quantiles = [torch.quantile(x_flat, q, dim=2, keepdim=True) for q in quantiles]  # shape: (batch, channels, 1)
+    #per_sample_quantiles_tiled = [q.unsqueeze(-1).expand(-1, -1, x.size(2), x.size(3)) for q in per_sample_quantiles]
+    #to_cat += per_sample_quantiles_tiled
     
     x_reshaped = x.view(x.size(0), x.size(1), -1)
-    pixel_quantiles = [torch.quantile(x_reshaped, q, dim=2, keepdim=True) for q in quantiles] # (batch, channels, 1)
-    pixel_quantiles_tiled = [q.unsqueeze(-1).repeat(1, 1, height, width) for q in pixel_quantiles]
-    to_cat.extend(pixel_quantiles_tiled)
+    #pixel_quantiles = [torch.quantile(x_reshaped, q, dim=2, keepdim=True) for q in quantiles] # (batch, channels, 1)
+    #pixel_quantiles_tiled = [q.unsqueeze(-1).repeat(1, 1, height, width) for q in pixel_quantiles]
+    #to_cat.extend(pixel_quantiles_tiled)
+    
+    batch_mean = torch.mean(x, dim=0, keepdim=True)
+    batch_mean_tiled = batch_mean.repeat(batch_size, 1, 1, 1)
+    to_cat.append(batch_mean_tiled)
+    
+    per_sample_mean = torch.mean(x, dim=(2, 3), keepdim=True)
+    per_sample_mean_tiled = per_sample_mean.repeat(1, 1, height, width)
+    to_cat.append(per_sample_mean_tiled)
+
+    pixel_mean = torch.mean(x_reshaped, dim=2, keepdim=True) # (batch, channels, 1)
+    pixel_mean = pixel_mean.unsqueeze(-1)
+    pixel_mean_tiled = pixel_mean.repeat(1, 1, height, width)
+    to_cat.append(pixel_mean_tiled)
     
     batch_std = torch.std(x, dim=0, keepdim=True)
     batch_std_tiled = batch_std.repeat(batch_size, 1, 1, 1)
@@ -85,13 +99,12 @@ def get_stats(x, rgb, args):
     pixel_std_tiled = pixel_std.repeat(1, 1, height, width)
     to_cat.append(pixel_std_tiled)
         
-    max_rgb, _ = x.max(dim=1, keepdim=True)
-    min_rgb, _ = x.min(dim=1, keepdim=True)
-    delta = max_rgb - min_rgb
-    v = max_rgb
-    s = delta / (max_rgb + 1e-7)  # Add a small constant to avoid division by zero
-    
     if(rgb):
+        max_rgb, _ = x.max(dim=1, keepdim=True)
+        min_rgb, _ = x.min(dim=1, keepdim=True)
+        delta = max_rgb - min_rgb
+        v = max_rgb
+        s = delta / (max_rgb + 1e-7)  # Add a small constant to avoid division by zero
         brightness_threshold_white = 0.9
         brightness_threshold_black = 0.9
         saturation_threshold_white = 0.1  # Low saturation to consider color close to grayscale for white
